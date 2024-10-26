@@ -67,7 +67,7 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
         temp_list : list = []
 
         for movie_1 in weighted_movie_distance:
-            movie_1 = [element for element in np.argsort(movie_1) if element in training_ids]
+            movie_1 = [element for element in np.argsort(movie_1) if str(element) in training_ids]
             temp_list.append(movie_1)
 
         for k in range(min_k, max_k):
@@ -78,7 +78,7 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
                 unit_ratings = 0
                 for neighbour in range(k):
                     # unit_ratings += user_rating_data[user_id]['RATED']['RATINGS'][int(weighted_movie_distance[validation_movie_id][neighbour])]
-                    unit_ratings += user_rating_data[user_id]['RATED'][str(int(temp_list[validation_movie_id][neighbour]))]
+                    unit_ratings += user_rating_data[user_id]['RATED'][str(int(temp_list[int(validation_movie_id)][neighbour]))]
 
                 # if user_rating_data[user_id]['RATED']['RATINGS'][validation_movie_id] == round(unit_ratings/k):
                 if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(unit_ratings/k):
@@ -97,8 +97,18 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
 
     return (best_k_neighbours, best_weights_id, max_accuracy)
 
+import random
 
-validate_ids = [1,4,6,8,12,32,37,38,39,40,44,46,48,52,54,59,60,61,62,63]
-training_ids = [64,68,71,72,73,74,75,78,79,80,84,87,88,90,91,99,101,103,104,110,114,115,119,121,124,125,126,127,129,130,131,132,134,135,137,140,141,145,146,148,150,151,152,153,159,162,163,164,165,166,167,168,169,171,172,174,176,177,180,181,182,185,186,189,190,192,193,194,195,196]
+keys = list(user_rating_data[0]['RATED'].keys())
+random.shuffle(keys)
 
-print(optimize_user(0,validate_ids,training_ids,2,3))
+split_index = int(len(keys) * 0.8)
+train_keys = keys[:split_index]
+test_keys = keys[split_index:]
+
+print(f"TEST: {test_keys}, train: {train_keys}")
+
+validate_ids = test_keys
+training_ids = train_keys
+
+print(optimize_user(0, validate_ids, training_ids, 2, 3))
