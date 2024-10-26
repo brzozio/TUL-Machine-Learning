@@ -20,9 +20,11 @@ with open(JSON_PATH + "\\movie_distance_graph.json", 'r') as file:
 with open(JSON_PATH + "\\USER_RATING_DATA.json", 'r') as file:
     user_rating_data = load(file)
 
+ANGLE_RESOLUTION = 5
+
 ANGLES = []
-for angle in range(11):
- ANGLES.append(angle*PI/10)
+for angle in range(ANGLE_RESOLUTION):
+ ANGLES.append(angle*PI/(ANGLE_RESOLUTION-1))
 
 SINES = []
 COSINES = []
@@ -31,16 +33,16 @@ for angle in ANGLES:
  COSINES.append(cos(angle))
 
 SINES[0] = 0
-SINES[10] = 1
+SINES[ANGLE_RESOLUTION-1] = 1
 COSINES[0] = 1
-COSINES[10] = 0
+COSINES[ANGLE_RESOLUTION-1] = 0
 
 PARAMS_WEIGHTS = []
 
-for i in range(11):
-    for j in range(11):
-        for k in range(11):
-            for l in range(11):
+for i in range(ANGLE_RESOLUTION):
+    for j in range(ANGLE_RESOLUTION):
+        for k in range(ANGLE_RESOLUTION):
+            for l in range(ANGLE_RESOLUTION):
                 PARAMS_WEIGHTS.append([SINES[i], COSINES[i]*SINES[j], COSINES[i]*COSINES[j]*SINES[k], COSINES[i]*COSINES[j]*COSINES[k]*SINES[l], COSINES[i]*COSINES[j]*COSINES[k]*COSINES[l]])
 
 
@@ -50,6 +52,9 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
     best_weights_id = 0
     best_k_neighbours = 0
     for weights in PARAMS_WEIGHTS:
+        
+        print(weights[0:1])
+        
         weighted_movie_distance = np.zeros((len(MOVIE_DISTANCE_GRAPH),len(MOVIE_DISTANCE_GRAPH)))
 
         for movie_1 in MOVIE_DISTANCE_GRAPH:
