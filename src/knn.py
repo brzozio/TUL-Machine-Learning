@@ -1,6 +1,6 @@
 import numpy as np
 
-def euclidean_distance(point1, point2):
+def distance_euclidean(point1, point2):
     return np.sqrt(np.sum((point1 - point2)**2))
 
 class KNN:
@@ -12,7 +12,7 @@ class KNN:
         self.y_train = y_train
         
     def predict_point(self, x):
-        distances = [euclidean_distance(x, x_train) for x_train in self.X_train]
+        distances = [distance_euclidean(x, x_train) for x_train in self.X_train]
         
         k_neighbors_indices = np.argsort(distances)[:self.k]
         
