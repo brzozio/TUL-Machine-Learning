@@ -8,7 +8,7 @@ from math import cos
 BASE_PATH : str = os.path.dirname(os.getcwd())
 CSV_PATH  : str = BASE_PATH + '\\csv'
 SRC_PATH  : str = BASE_PATH + '\\src'
-JSON_PATH : str = BASE_PATH + '\\TUL-MACHINE-LEARNING\\json'
+JSON_PATH : str = BASE_PATH + '\\MACHINE AND DEEP LEARNING\\ML\\json'
 
 NUM_OF_MOVIES = 200
 PI = 1.57079632679
@@ -81,6 +81,8 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
                 max_accuracy = accuracy
                 best_weights_id = weights
                 best_k_neighbours = k
+        
+                print(f"User: {user_id:<5}, weights: {best_weights_id}, k: {best_k_neighbours}, accuracy: {max_accuracy}")
 
     return (best_k_neighbours, best_weights_id, max_accuracy)
 
