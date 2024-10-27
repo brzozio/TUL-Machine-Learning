@@ -93,17 +93,16 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
                     # unit_ratings += user_rating_data[user_id]['RATED']['RATINGS'][int(weighted_movie_distance[validation_movie_id][neighbour])]
                     
                     # working: mean of k neighbours
-                    # unit_ratings += user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
+                    unit_ratings += user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
 
                     # weighted mean o k neighbours via harmonic descent
-                    unit_ratings += (k-neighbour-1)*user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
+                    # unit_ratings += (k-neighbour)*user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
 
                 # if user_rating_data[user_id]['RATED']['RATINGS'][validation_movie_id] == round(unit_ratings/k):
                 
                 #working: mean of k neighbours
-                #if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(unit_ratings/k):
-
-                if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(2*unit_ratings/k/(k+1)):
+                if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(unit_ratings/k):
+                # if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(2*unit_ratings/k/(k+1)):
                     accuracy += 1
                
             
@@ -147,21 +146,22 @@ def test_user(user_id: int, best_weights: list, test_ids: list, train_ids: list,
         unit_ratings = 0
         for neighbour in range(best_k_neighbours):
             
-            # unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
-            unit_ratings += (best_k_neighbours-neighbour-1)*user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            #unit_ratings += (best_k_neighbours-neighbour)*user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
             # print(f"RATING FOR NEIGHTBOUR {neighbour}: {user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]}")
 
-        # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
+        print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
+        # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1))}")
 
-        # if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
-        if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
+        if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
+        # if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
             
             accuracy += 1
             
         
     accuracy = accuracy/len(test_ids)
 
-    print(f"ACCURACY: {accuracy}, weights: {best_weights}, K: {best_k_neighbours}")
+    print(f"ACCURACY: {accuracy:.2f}, weights: {best_weights}, K: {best_k_neighbours}")
 
     return accuracy
 
@@ -212,4 +212,4 @@ for user in range(10):
   
 
 user_test_data_df = pd.DataFrame(user_test_data)
-user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED_HYPER_PYRAMID_WEIGHT_HARMONIC.csv')
+user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED.csv')
