@@ -19,7 +19,7 @@ with open(JSON_PATH + "\\movie_distance_graph.json", 'r') as file:
     MOVIE_DISTANCE_GRAPH = {i:{j:MOVIE_DISTANCE_GRAPH[str(i)][str(j)] for j in range(len(MOVIE_DISTANCE_GRAPH[str(i)]))} for i in range(len(MOVIE_DISTANCE_GRAPH))}
 
 with open(JSON_PATH + "\\USER_RATING_DATA.json", 'r') as file:
-    user_rating_data = load(file)
+    USER_RATING_DATA = load(file)
 
 # ANGLE_RESOLUTION = 5
 
@@ -61,8 +61,8 @@ for i in RESOLUTION:
 def predict(user_id: int, best_weights: list, best_k_neighbours: int) -> float:   
 
 
-    preditc_ids: list = list(user_rating_data[user]['RATED'].keys())
-    train_ids: list = list(user_rating_data[user]['NAN_RATED'].keys())
+    preditc_ids: list = list(USER_RATING_DATA[user]['NAN_RATED'].keys())
+    train_ids: list = list(USER_RATING_DATA[user]['RATED'].keys())
 
     weighted_movie_distance = np.zeros((len(MOVIE_DISTANCE_GRAPH),len(MOVIE_DISTANCE_GRAPH)))
 
@@ -90,13 +90,13 @@ def predict(user_id: int, best_weights: list, best_k_neighbours: int) -> float:
         for neighbour in range(best_k_neighbours):
             
             # unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
-            unit_ratings += (best_k_neighbours-neighbour-1)*user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            unit_ratings += (best_k_neighbours-neighbour-1)*USER_RATING_DATA[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
             # print(f"RATING FOR NEIGHTBOUR {neighbour}: {user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]}")
 
         # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
 
         # if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
-        if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
+        if USER_RATING_DATA[user_id]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
             
             accuracy += 1
             
@@ -114,7 +114,7 @@ for user in range(10):
         #Importowanie z .json
    
         user_test_data.append({
-            'USER_ID': user_rating_data[user]['USER_ID'],
+            'USER_ID': USER_RATING_DATA[user]['USER_ID'],
             'ACCURACY': accuracy,
             'POPULARITY': best_weights_out[0],
             'RATING': best_weights_out[1],

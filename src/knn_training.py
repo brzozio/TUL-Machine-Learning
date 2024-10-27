@@ -165,12 +165,14 @@ def test_user(user_id: int, best_weights: list, test_ids: list, train_ids: list,
 
     return accuracy
 
-user_test_data : list = []
+NUM_OF_CROSS_VALIDATION = 3
+NUM_OF_TRAINED_USERS = len(user_rating_data)
 
+user_test_data = []
+list_best_k_out = []
+list_best_weights_out = []
 
-NUM_OF_CROSS_VALIDATION = 5
-
-for user in range(10):
+for user in range(NUM_OF_TRAINED_USERS):
 
     print(user)
     accuracy = 0
@@ -207,19 +209,15 @@ for user in range(10):
             best_k_out = temp_best_k_out
             best_weights_out = temp_best_weights_out
         
+    list_best_k_out.append(best_k_out)
+    list_best_weights_out.append(best_weights_out)
 
-    user_test_data.append({
-        'USER_ID': user_rating_data[user]['USER_ID'],
-        'ACCURACY': accuracy,
-        'K': best_k_out,
-        'POPULARITY': best_weights_out[0],
-        'RATING': best_weights_out[1],
-        'DIRECTOR': best_weights_out[2],
-        'ACTORS': best_weights_out[3],
-        'GENRES': best_weights_out[4]
-    })
-
-  
+user_test_data = {
+    user_rating_data[i]['USER_ID']: {
+        'K': list_best_k_out[i],
+        'WEIGHTS': list_best_weights_out[i]
+    } for i in range(NUM_OF_TRAINED_USERS)
+}
 
 user_test_data_df = pd.DataFrame(user_test_data)
-user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED.csv')
+user_test_data_df.to_json(JSON_PATH + '\\USER_HYPER_PARAMS.json', indent=4)
