@@ -150,7 +150,7 @@ def test_user(user_id: int, best_weights: list, test_ids: list, train_ids: list,
             #unit_ratings += (best_k_neighbours-neighbour)*user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
             # print(f"RATING FOR NEIGHTBOUR {neighbour}: {user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]}")
 
-        print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
+        # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
         # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1))}")
 
         if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
@@ -171,7 +171,12 @@ user_test_data : list = []
 NUM_OF_CROSS_VALIDATION = 5
 
 for user in range(10):
+
     print(user)
+    accuracy = 0
+    best_k_out = 0
+    best_weights_out = []
+
     for validation_id in range(NUM_OF_CROSS_VALIDATION):
 
         keys = list(user_rating_data[user]['RATED'].keys())
@@ -193,21 +198,26 @@ for user in range(10):
 
         # print(f"Train keys: {train_keys}, \nvalid keys: {valid_keys}, \ntest keys: {test_keys}")
 
-        best_k_out, best_weights_out, _ = optimize_user(user, validate_ids, training_ids, 2, 7)
+        temp_best_k_out, temp_best_weights_out, _ = optimize_user(user, validate_ids, training_ids, 2, 7)
 
-        accuracy = test_user(user_id=user, best_weights=best_weights_out, best_k_neighbours=best_k_out, test_ids=test_ids, train_ids=train_valid_keys)
+        temp_accuracy = test_user(user_id=user, best_weights=temp_best_weights_out, best_k_neighbours=temp_best_k_out, test_ids=test_ids, train_ids=train_valid_keys)
 
-        user_test_data.append({
-            'USER_ID': user_rating_data[user]['USER_ID'],
-            'ACCURACY': accuracy,
-            'POPULARITY': best_weights_out[0],
-            'RATING': best_weights_out[1],
-            'DIRECTOR': best_weights_out[2],
-            'ACTORS': best_weights_out[3],
-            'GENRES': best_weights_out[4],
-            'K': best_k_out,
-            'VALIDATION_ID': validation_id
-        })
+        if temp_accuracy > accuracy:
+            accuracy = temp_accuracy
+            best_k_out = temp_best_k_out
+            best_weights_out = temp_best_weights_out
+        
+
+    user_test_data.append({
+        'USER_ID': user_rating_data[user]['USER_ID'],
+        'ACCURACY': accuracy,
+        'K': best_k_out,
+        'POPULARITY': best_weights_out[0],
+        'RATING': best_weights_out[1],
+        'DIRECTOR': best_weights_out[2],
+        'ACTORS': best_weights_out[3],
+        'GENRES': best_weights_out[4]
+    })
 
   
 
