@@ -1,14 +1,14 @@
 import pandas as pd
 import numpy as np
 import os
+import random
 from json import load
 from math import sin
 from math import cos
 
-BASE_PATH : str = os.path.dirname(os.getcwd())
-CSV_PATH  : str = BASE_PATH + '\\csv'
-SRC_PATH  : str = BASE_PATH + '\\src'
-JSON_PATH : str = BASE_PATH + '\\MACHINE AND DEEP LEARNING\\ML\\json'
+SRC_PATH : str  = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH : str  = os.path.dirname(SRC_PATH) + '\\csv'
+JSON_PATH : str = os.path.dirname(SRC_PATH) + '\\json'
 
 NUM_OF_MOVIES = 200
 PI = 1.57079632679
@@ -46,15 +46,15 @@ for i in range(ANGLE_RESOLUTION):
                 PARAMS_WEIGHTS.append([SINES[i], COSINES[i]*SINES[j], COSINES[i]*COSINES[j]*SINES[k], COSINES[i]*COSINES[j]*COSINES[k]*SINES[l], COSINES[i]*COSINES[j]*COSINES[k]*COSINES[l]])
 
 
-def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: int = 2, max_k: int = 6) -> tuple[int,int,float]:    
+def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: int = 2, max_k: int = 6) -> tuple[int,list,float]:    
 
     max_accuracy = 0
     best_weights_id = 0
     best_k_neighbours = 0
-    print(f"User id: {user_id}, data: {user_rating_data[user_id]['RATED']}")
+    # print(f"User id: {user_id}, data: {user_rating_data[user_id]['RATED']}")
     for weights in PARAMS_WEIGHTS:
         
-        print(weights[0:1])
+        # print(weights[0:1])
         
         weighted_movie_distance = np.zeros((len(MOVIE_DISTANCE_GRAPH),len(MOVIE_DISTANCE_GRAPH)))
 
@@ -64,11 +64,11 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
                     weighted_movie_distance[movie_1][movie_2] += weights[id]*param
 
         # conversion of distances to sorted movie ids
-        temp_list : list = []
+        training_weighted_movie_distance : list = []
 
         for movie_1 in weighted_movie_distance:
             movie_1 = [element for element in np.argsort(movie_1) if str(element) in training_ids]
-            temp_list.append(movie_1)
+            training_weighted_movie_distance.append(movie_1)
 
         for k in range(min_k, max_k):
             
@@ -78,7 +78,7 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
                 unit_ratings = 0
                 for neighbour in range(k):
                     # unit_ratings += user_rating_data[user_id]['RATED']['RATINGS'][int(weighted_movie_distance[validation_movie_id][neighbour])]
-                    unit_ratings += user_rating_data[user_id]['RATED'][str(int(temp_list[int(validation_movie_id)][neighbour]))]
+                    unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(validation_movie_id)][neighbour])]
 
                 # if user_rating_data[user_id]['RATED']['RATINGS'][validation_movie_id] == round(unit_ratings/k):
                 if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(unit_ratings/k):
@@ -97,18 +97,87 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
 
     return (best_k_neighbours, best_weights_id, max_accuracy)
 
-import random
+def test_user(user_id: int, best_weights_id: list, test_ids: list, train_ids: list, best_k_neighbours: int) -> float:    
 
-keys = list(user_rating_data[0]['RATED'].keys())
-random.shuffle(keys)
+  
+    weighted_movie_distance = np.zeros((len(MOVIE_DISTANCE_GRAPH),len(MOVIE_DISTANCE_GRAPH)))
 
-split_index = int(len(keys) * 0.8)
-train_keys = keys[:split_index]
-test_keys = keys[split_index:]
+    for movie_1 in MOVIE_DISTANCE_GRAPH:
+        
+        for movie_2 in MOVIE_DISTANCE_GRAPH[movie_1]:                
+            
+            for id, param in enumerate(MOVIE_DISTANCE_GRAPH[movie_2][movie_1]):
+                
+                weighted_movie_distance[movie_1][movie_2] += best_weights_id[id]*param
 
-print(f"TEST: {test_keys}, train: {train_keys}")
 
-validate_ids = test_keys
-training_ids = train_keys
+    training_weighted_movie_distance : list = []
 
-print(optimize_user(0, validate_ids, training_ids, 2, 3))
+    for movie_1 in weighted_movie_distance:
+        
+        movie_1 = [element for element in np.argsort(movie_1) if str(element) in train_ids]
+        training_weighted_movie_distance.append(movie_1)
+
+    accuracy = 0
+    
+    for test_movie_id in test_ids:
+        
+        unit_ratings = 0
+        for neighbour in range(best_k_neighbours):
+            
+            unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            # print(f"RATING FOR NEIGHTBOUR {neighbour}: {user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]}")
+
+        print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
+
+        if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
+            
+            accuracy += 1
+            
+        
+    accuracy = accuracy/len(test_ids)
+
+    print(f"ACCURACY: {accuracy}, weights: {best_weights_id}, K: {best_k_neighbours}")
+
+    return accuracy
+
+user_test_data : list = []
+
+for user in range(len(user_rating_data)):
+
+    keys = list(user_rating_data[user]['RATED'].keys())
+    random.shuffle(keys)
+    split_index = int(len(keys) * 0.8)
+    train_valid_keys = keys[:split_index]
+    test_keys = keys[split_index:]
+
+    keys = list(train_valid_keys)
+    random.shuffle(keys)
+    split_index = int(len(keys) * 0.8)
+    train_keys = keys[:split_index]
+    valid_keys = keys[split_index:]
+
+
+    test_ids = test_keys
+    validate_ids = valid_keys
+    training_ids = train_keys
+
+    # print(f"Train keys: {train_keys}, \nvalid keys: {valid_keys}, \ntest keys: {test_keys}")
+
+    best_k_out, best_weights_out, _ = optimize_user(user, validate_ids, training_ids, 2, 6)
+
+    accuracy = test_user(user_id=user, best_weights_id=best_weights_out, best_k_neighbours=best_k_out, test_ids=test_ids, train_ids=training_ids)
+
+    user_test_data.append({
+        'USER_ID': user_rating_data[user]['USER_ID'],
+        'ACCURACY': accuracy,
+        'POPULARITY': best_weights_out[0],
+        'RATING': best_weights_out[1],
+        'DIRECTOR': best_weights_out[2],
+        'ACTORS': best_weights_out[3],
+        'GENRES': best_weights_out[4],
+        'K': best_k_out
+    })
+
+user_test_data_df = pd.DataFrame(user_test_data)
+user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED.csv')
