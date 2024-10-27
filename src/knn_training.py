@@ -21,37 +21,49 @@ with open(JSON_PATH + "\\movie_distance_graph.json", 'r') as file:
 with open(JSON_PATH + "\\USER_RATING_DATA.json", 'r') as file:
     user_rating_data = load(file)
 
-ANGLE_RESOLUTION = 5
+# ANGLE_RESOLUTION = 5
 
-ANGLES = []
-for angle in range(ANGLE_RESOLUTION):
- ANGLES.append(angle*PI/(ANGLE_RESOLUTION-1))
+# ANGLES = []
+# for angle in range(ANGLE_RESOLUTION):
+#  ANGLES.append(angle*PI/(ANGLE_RESOLUTION-1))
 
-SINES = []
-COSINES = []
-for angle in ANGLES:
- SINES.append(sin(angle))
- COSINES.append(cos(angle))
+# SINES = []
+# COSINES = []
+# for angle in ANGLES:
+#  SINES.append(sin(angle))
+#  COSINES.append(cos(angle))
 
-SINES[0] = 0
-SINES[ANGLE_RESOLUTION-1] = 1
-COSINES[0] = 1
-COSINES[ANGLE_RESOLUTION-1] = 0
+# SINES[0] = 0
+# SINES[ANGLE_RESOLUTION-1] = 1
+# COSINES[0] = 1
+# COSINES[ANGLE_RESOLUTION-1] = 0
+
+# PARAMS_WEIGHTS = []
+
+# for i in range(ANGLE_RESOLUTION):
+#     for j in range(ANGLE_RESOLUTION):
+#         for k in range(ANGLE_RESOLUTION):
+#             for l in range(ANGLE_RESOLUTION):
+#                 PARAMS_WEIGHTS.append([SINES[i], COSINES[i]*SINES[j], COSINES[i]*COSINES[j]*SINES[k], COSINES[i]*COSINES[j]*COSINES[k]*SINES[l], COSINES[i]*COSINES[j]*COSINES[k]*COSINES[l]])
+
+RESOLUTION = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 
 PARAMS_WEIGHTS = []
 
-for i in range(ANGLE_RESOLUTION):
-    for j in range(ANGLE_RESOLUTION):
-        for k in range(ANGLE_RESOLUTION):
-            for l in range(ANGLE_RESOLUTION):
-                PARAMS_WEIGHTS.append([SINES[i], COSINES[i]*SINES[j], COSINES[i]*COSINES[j]*SINES[k], COSINES[i]*COSINES[j]*COSINES[k]*SINES[l], COSINES[i]*COSINES[j]*COSINES[k]*COSINES[l]])
+for i in RESOLUTION:
+    for j in RESOLUTION:
+        for k in RESOLUTION:
+            for l in RESOLUTION:
+                for m in RESOLUTION:
+                    if i+j+k+l+m == 1:
+                        PARAMS_WEIGHTS.append([i,j,k,l,m])
 
 
 def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: int = 2, max_k: int = 6) -> tuple[int,list,float]:    
 
     max_accuracy = 0
-    best_weights_id = 0
-    best_k_neighbours = 0
+    best_weights_id = [0,0,0,0,0]
+    best_k_neighbours = min_k
     # print(f"User id: {user_id}, data: {user_rating_data[user_id]['RATED']}")
     for weights in PARAMS_WEIGHTS:
         
@@ -79,10 +91,19 @@ def optimize_user(user_id: int, validate_ids: list, training_ids: list, min_k: i
                 unit_ratings = 0
                 for neighbour in range(k):
                     # unit_ratings += user_rating_data[user_id]['RATED']['RATINGS'][int(weighted_movie_distance[validation_movie_id][neighbour])]
-                    unit_ratings += user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
+                    
+                    # working: mean of k neighbours
+                    # unit_ratings += user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
+
+                    # weighted mean o k neighbours via harmonic descent
+                    unit_ratings += (k-neighbour-1)*user_rating_data[user_id]['RATED'][str(training_ids_sorted[int(validation_movie_id)][neighbour])]
 
                 # if user_rating_data[user_id]['RATED']['RATINGS'][validation_movie_id] == round(unit_ratings/k):
-                if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(unit_ratings/k):
+                
+                #working: mean of k neighbours
+                #if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(unit_ratings/k):
+
+                if user_rating_data[user_id]['RATED'][str(validation_movie_id)] == round(2*unit_ratings/k/(k+1)):
                     accuracy += 1
                
             
@@ -126,12 +147,14 @@ def test_user(user_id: int, best_weights: list, test_ids: list, train_ids: list,
         unit_ratings = 0
         for neighbour in range(best_k_neighbours):
             
-            unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            # unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            unit_ratings += (best_k_neighbours-neighbour-1)*user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
             # print(f"RATING FOR NEIGHTBOUR {neighbour}: {user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]}")
 
-        print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
+        # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
 
-        if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
+        # if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
+        if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
             
             accuracy += 1
             
@@ -189,4 +212,4 @@ for user in range(10):
   
 
 user_test_data_df = pd.DataFrame(user_test_data)
-user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED.csv')
+user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED_HYPER_PYRAMID_WEIGHT_HARMONIC.csv')
