@@ -21,30 +21,8 @@ with open(JSON_PATH + "\\movie_distance_graph.json", 'r') as file:
 with open(JSON_PATH + "\\USER_RATING_DATA.json", 'r') as file:
     USER_RATING_DATA = load(file)
 
-# ANGLE_RESOLUTION = 5
-
-# ANGLES = []
-# for angle in range(ANGLE_RESOLUTION):
-#  ANGLES.append(angle*PI/(ANGLE_RESOLUTION-1))
-
-# SINES = []
-# COSINES = []
-# for angle in ANGLES:
-#  SINES.append(sin(angle))
-#  COSINES.append(cos(angle))
-
-# SINES[0] = 0
-# SINES[ANGLE_RESOLUTION-1] = 1
-# COSINES[0] = 1
-# COSINES[ANGLE_RESOLUTION-1] = 0
-
-# PARAMS_WEIGHTS = []
-
-# for i in range(ANGLE_RESOLUTION):
-#     for j in range(ANGLE_RESOLUTION):
-#         for k in range(ANGLE_RESOLUTION):
-#             for l in range(ANGLE_RESOLUTION):
-#                 PARAMS_WEIGHTS.append([SINES[i], COSINES[i]*SINES[j], COSINES[i]*COSINES[j]*SINES[k], COSINES[i]*COSINES[j]*COSINES[k]*SINES[l], COSINES[i]*COSINES[j]*COSINES[k]*COSINES[l]])
+with open(JSON_PATH + "\\USER_HYPER_PARAMS.json", 'r') as file:
+    USER_HYPER_PARAMS = load(file)
 
 RESOLUTION = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 
@@ -58,11 +36,10 @@ for i in RESOLUTION:
                     if i+j+k+l+m == 1:
                         PARAMS_WEIGHTS.append([i,j,k,l,m])
 
-def predict(user_id: int, best_weights: list, best_k_neighbours: int) -> float:   
+def predict(user_id: int, user_iter: int, best_weights: list, best_k_neighbours: int, predict_ids: list, train_ids: list) -> tuple[list, list]:   
 
-
-    preditc_ids: list = list(USER_RATING_DATA[user]['NAN_RATED'].keys())
-    train_ids: list = list(USER_RATING_DATA[user]['RATED'].keys())
+    returned_movies: list = []
+    returned_reviews: list = []
 
     weighted_movie_distance = np.zeros((len(MOVIE_DISTANCE_GRAPH),len(MOVIE_DISTANCE_GRAPH)))
 
@@ -82,50 +59,66 @@ def predict(user_id: int, best_weights: list, best_k_neighbours: int) -> float:
         movie_1 = [element for element in np.argsort(movie_1) if str(element) in train_ids]
         training_weighted_movie_distance.append(movie_1)
 
-    accuracy = 0
+    # accuracy = 0
     
-    for test_movie_id in preditc_ids:
+    for test_movie_id in predict_ids:
         
         unit_ratings = 0
         for neighbour in range(best_k_neighbours):
             
-            # unit_ratings += user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
-            unit_ratings += (best_k_neighbours-neighbour-1)*USER_RATING_DATA[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            unit_ratings += USER_RATING_DATA[user_iter]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
+            # unit_ratings += (best_k_neighbours-neighbour-1)*USER_RATING_DATA[user_iter]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]
             # print(f"RATING FOR NEIGHTBOUR {neighbour}: {user_rating_data[user_id]['RATED'][str(training_weighted_movie_distance[int(test_movie_id)][neighbour])]}")
-
-        # print(f"User rating: {user_rating_data[user_id]['RATED'][str(test_movie_id)]}, Predicted: {round(unit_ratings/best_k_neighbours)}")
-
+      
         # if user_rating_data[user_id]['RATED'][str(test_movie_id)] == round(unit_ratings/best_k_neighbours):
-        if USER_RATING_DATA[user_id]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
+        # if USER_RATING_DATA[user_iter]['RATED'][str(test_movie_id)] == round(2*unit_ratings/best_k_neighbours/(best_k_neighbours+1)):
             
-            accuracy += 1
-            
+        #     accuracy += 1
+
+        rating = round(round(unit_ratings/best_k_neighbours))
         
-    accuracy = accuracy/len(preditc_ids)
+        returned_movies.append(test_movie_id)
+        returned_reviews.append(rating)
 
-    print(f"ACCURACY: {accuracy}, weights: {best_weights}, K: {best_k_neighbours}")
+    # accuracy = accuracy/len(preditc_ids)
 
-    return accuracy
+    # print(f"ACCURACY: {accuracy}, weights: {best_weights}, K: {best_k_neighbours}")
 
-user_test_data : list = []
+    return (returned_movies, returned_reviews)
 
-for user in range(10):
+user_rating_data_predicted : list = []
+user_rating_data_movies: list = []
+
+NUM_OF_USERS : int = len(USER_RATING_DATA)
+
+for user in range(NUM_OF_USERS):
+    
+    user_id :    int  = USER_RATING_DATA[user]['USER_ID']
+    best_weight: list = USER_HYPER_PARAMS[str(user_id)]['WEIGHTS']
+    best_k      : int  = USER_HYPER_PARAMS[str(user_id)]['K']
+    preditc_ids: list = list(USER_RATING_DATA[user]['NAN_RATED'].keys())
+    train_ids:   list = list(USER_RATING_DATA[user]['RATED'].keys())
+
+    # print(f"{user:<3} User: {user_id:<4} Weights: {best_weight} K: {best_k}")
         
-        #Importowanie z .json
-   
-        user_test_data.append({
-            'USER_ID': USER_RATING_DATA[user]['USER_ID'],
-            'ACCURACY': accuracy,
-            'POPULARITY': best_weights_out[0],
-            'RATING': best_weights_out[1],
-            'DIRECTOR': best_weights_out[2],
-            'ACTORS': best_weights_out[3],
-            'GENRES': best_weights_out[4],
-            'K': best_k_out,
-            'VALIDATION_ID': validation_id
-        })
+    returned_movies, returned_reviews = predict(user_id=user_id, user_iter=user, best_weights=best_weight, best_k_neighbours=best_k, predict_ids=preditc_ids, train_ids=train_ids)
+    
+    user_rating_data_movies.append(returned_movies)
+    user_rating_data_predicted.append(returned_reviews)
+    
 
-  
+for i in range(3):
+    print(f"User {USER_RATING_DATA[i]['USER_ID']} - Movies: {user_rating_data_movies[i]}, Reviews: {user_rating_data_predicted[i]}")
+
+
+user_test_data = {
+    USER_RATING_DATA[i]['USER_ID']: {
+       'MOVIES' : user_rating_data_movies[i],
+       'RATINGS' : user_rating_data_predicted[i]
+    }
+    for i in range(NUM_OF_USERS)
+}
+
 
 user_test_data_df = pd.DataFrame(user_test_data)
-user_test_data_df.to_csv(CSV_PATH + '\\USER_DATA_TEST_PREDICTED_HYPER_PYRAMID_WEIGHT_HARMONIC.csv')
+user_test_data_df.to_json(JSON_PATH + '\\USER_PREDICTED_RATINGS.json', indent=4)
