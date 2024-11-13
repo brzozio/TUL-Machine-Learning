@@ -30,5 +30,5 @@ for prediction in submission_data:
         print(f'no movie_id: {int(prediction[2])-1} in user_id: {int(prediction[1])}')
 
 print(submission_data)
-np.savetxt(X=submission_data, fname=CSV_PATH + "\\submission.csv", delimiter=",")
+np.savetxt(X=submission_data, fname=CSV_PATH + "\\submission.csv", delimiter=";")
 
