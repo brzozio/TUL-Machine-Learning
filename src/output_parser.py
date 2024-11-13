@@ -24,10 +24,10 @@ total_misses = 0
 
 for prediction in submission_data:
     # movie id generated in USER_PREDICTED_RATINGS is 0 indexed vs 1 indexed in movie _id in task.csv
-    if int(prediction[2])-1 in USER_PREDICTED_RATINGS[int(prediction[1])]:
-        prediction[3] = int(USER_PREDICTED_RATINGS[int(prediction[1])][int(prediction[2])-1])
+    if int(prediction[2]) in USER_PREDICTED_RATINGS[int(prediction[1])]:
+        prediction[3] = int(USER_PREDICTED_RATINGS[int(prediction[1])][int(prediction[2])])
     else:
-        print(f'no movie_id: {int(prediction[2])-1} in user_id: {int(prediction[1])}')
+        print(f'no movie_id: {int(prediction[2])} in user_id: {int(prediction[1])}')
 
 print(submission_data)
 np.savetxt(X=submission_data, fname=CSV_PATH + "\\submission.csv", delimiter=";")
