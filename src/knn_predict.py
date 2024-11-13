@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import random
-from json import load
+from json import load, dump
 from math import sin
 from math import cos
 from math import sqrt
@@ -119,6 +119,20 @@ user_test_data = {
     for i in range(NUM_OF_USERS)
 }
 
-
 user_test_data_df = pd.DataFrame(user_test_data)
 user_test_data_df.to_json(JSON_PATH + '\\USER_PREDICTED_RATINGS.json', indent=4)
+
+with open(JSON_PATH + '\\USER_PREDICTED_RATINGS.json', 'r') as f:
+    data = load(f)
+
+user_test_data = {}
+for user_id, ratings_data in data.items():
+    movies = ratings_data['MOVIES']
+    ratings = ratings_data['RATINGS']
+    
+    # Create a dictionary for each user where each movie ID maps to its rating
+    user_test_data[user_id] = {movie: rating for movie, rating in zip(movies, ratings)}
+
+
+with open(JSON_PATH + '\\USER_PREDICTED_RATINGS_TRANSFORMED.json', 'w') as f:
+    dump(user_test_data, f, indent=4)
