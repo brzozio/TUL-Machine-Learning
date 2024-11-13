@@ -113,7 +113,8 @@ for i in range(3):
 
 user_test_data = {
     USER_RATING_DATA[i]['USER_ID']: {
-       'MOVIES' : user_rating_data_movies[i],
+    #    'MOVIES' : user_rating_data_movies[i],
+       'MOVIES' : [str(int(movie_id) + 1) for movie_id in user_rating_data_movies[i]],
        'RATINGS' : user_rating_data_predicted[i]
     }
     for i in range(NUM_OF_USERS)
