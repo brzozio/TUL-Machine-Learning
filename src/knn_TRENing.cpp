@@ -2,10 +2,26 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <vector>
+#include <array>
 #include <unordered_map>
+#include <random>
+#include <future>
+
 
 #define NUM_OF_FEATURES 5
 #define NUM_OF_MOVIES 200
+
+#define HYPER_PARAMS_DIM 5
+#define HYPER_PARAMS_VALUES { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 }
+#define HPR 6
+#define HYPER_PARAMS_COMBINATIONS HPR*(HPR+1)*(HPR+2)*(HPR+3)/24
+
+#define TRAIN_ID_SPLIT 80
+#define TRAIN_NUM_OF_MOVIES 90
+#define MAX_NEIGH 6
+
+#define NUM_OF_USERS 358
 
 std::string get_repository_path(){    
     std::string repo_path = std::filesystem::current_path().generic_string();
@@ -157,6 +173,21 @@ inline int load_user_ratings_train_data(const std::string &REPO_PATH,
     return 0;
 }
 
+inline void initialize_hyper_params(float (&params)[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM]){
+    std::array<float,HPR> hiparams = HYPER_PARAMS_VALUES;
+    
+    int param_id = 0;
+    for(auto x0: hiparams){for(auto x1: hiparams){for(auto x2: hiparams){for(auto x3: hiparams){for(auto x4: hiparams){
+        if(x0+x1+x2+x3+x4==1){
+            params[param_id][0] = x0;
+            params[param_id][1] = x1;
+            params[param_id][2] = x2;
+            params[param_id][3] = x3;
+            params[param_id][4] = x4;
+            param_id++;
+        }
+    }}}}}
+}
 
 int main(int argc, char** argv){
 
@@ -186,12 +217,13 @@ int main(int argc, char** argv){
         return 3;
     }
 
+    float METRIC[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM];
+    initialize_hyper_params(METRIC);
+
     float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
     int movie_nearest_neighbours[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
 
-    float metric[5] = {0.2,0.2,0.2,0.2,0.2};
-
-    argsort_scaled_distances(movie_nearest_neighbours, movie_distance_tensor, MOVIE_DISTANCE_COEFFICIENTS_TENSOR, metric);
+    argsort_scaled_distances(movie_nearest_neighbours, movie_distance_tensor, MOVIE_DISTANCE_COEFFICIENTS_TENSOR, METRIC[0]);
 
     return 0;
 }
