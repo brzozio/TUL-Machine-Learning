@@ -8,7 +8,6 @@
 #include <random>
 #include <future>
 
-
 #define NUM_OF_FEATURES 5
 #define NUM_OF_MOVIES 200
 
@@ -41,7 +40,9 @@ struct movie_rating{
 // to their new relative distances storing the result in 'destination_tensor'
 inline void argsort_scaled_distances(int (&destiantion_tensor)[NUM_OF_MOVIES][NUM_OF_MOVIES], float (&scaled_dist_tensor)[NUM_OF_MOVIES][NUM_OF_MOVIES],
     const std::vector<std::vector<std::vector<float>>> (&distance_coefficients), const float (&metric)[NUM_OF_FEATURES]){
-        
+    
+    std::memset(scaled_dist_tensor, 0.0, NUM_OF_MOVIES*NUM_OF_MOVIES*sizeof(float));
+
     for(int movie_1_id = 0; movie_1_id < NUM_OF_MOVIES; movie_1_id++){
         for(int feature_id = 0; feature_id < NUM_OF_FEATURES; feature_id++){
             for(int movie_2_id = 0; movie_2_id < NUM_OF_MOVIES; movie_2_id++){
@@ -109,7 +110,7 @@ inline int load_movie_realtive_distances(const std::string &REPO_PATH, std::vect
 }
 
 inline int load_user_ratings_train_data(const std::string &REPO_PATH, 
-    std::unordered_map<int,int> &local_user_id, std::vector<std::vector<int>> &user_ratings, std::vector<std::vector<int>>  &user_rated_movie_id){ 
+    std::unordered_map<int,int> &local_user_id, std::vector<std::vector<int>> &user_movie_rating, std::vector<std::vector<int>> &user_movie_id){ 
 
     std::ifstream file_user_ratings_train(REPO_PATH + "csv/train.csv");
     if (!file_user_ratings_train.is_open()) return 1;
@@ -118,24 +119,32 @@ inline int load_user_ratings_train_data(const std::string &REPO_PATH,
     
     int current_local_user_id = 0;
     int loaded_value = 0;
-    std::vector<int> current_user_ratings;
-    std::vector<int> current_user_rated_movie_id;
+    // binding ratings and movie ids to later shuffle for each user
+    std::vector<std::vector<std::pair<int,int>>> user_ratings;
+    std::vector<std::pair<int,int>> current_user_ratings;
+    std::pair<int,int> pair_loaded_values;
 
     // manually executing the first step to avoid uncesseraty logic inside the loop
     std::getline(file_user_ratings_train,line);
     {
         std::stringstream string_stream(line);
         std::string loaded_string;
+
         std::getline(string_stream, loaded_string, ';');
-        std::getline(string_stream, loaded_string, ';');
+
+        std::getline(string_stream, loaded_string, ';');        
         loaded_value = std::stoi(loaded_string);
         local_user_id[loaded_value] = current_local_user_id;
+
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
-        current_user_rated_movie_id.push_back(loaded_value);
+        pair_loaded_values.first = loaded_value;
+
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
-        current_user_ratings.push_back(loaded_value);
+        pair_loaded_values.second = loaded_value;
+
+        current_user_ratings.push_back(pair_loaded_values);
     }
 
     while(std::getline(file_user_ratings_train,line)){
@@ -148,27 +157,41 @@ inline int load_user_ratings_train_data(const std::string &REPO_PATH,
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
         if(local_user_id.find(loaded_value) == local_user_id.end()){
+
             current_local_user_id++;
             local_user_id[loaded_value] = current_local_user_id;
+
             user_ratings.push_back(current_user_ratings);
             current_user_ratings.resize(0);
-            user_rated_movie_id.push_back(current_user_rated_movie_id);
-            current_user_rated_movie_id.resize(0);
         }
 
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
-        current_user_rated_movie_id.push_back(loaded_value);
+        pair_loaded_values.first = loaded_value;
 
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
-        current_user_ratings.push_back(loaded_value);
+        pair_loaded_values.second = loaded_value;
+
+        current_user_ratings.push_back(pair_loaded_values);
     }
     // pushing dangling vectors after no new key is found upon reaching EoF
     user_ratings.push_back(current_user_ratings);
-    user_rated_movie_id.push_back(current_user_rated_movie_id);
+    
+    file_user_ratings_train.close(); 
 
-    file_user_ratings_train.close();
+    std::random_device rd;
+    std::mt19937 g(rd());
+    
+    for(int u_id = 0; u_id < NUM_OF_USERS; u_id++){
+        std::shuffle(user_ratings[u_id].begin(), user_ratings[u_id].end(), g);
+        for(int m_id = 0; m_id < TRAIN_NUM_OF_MOVIES; m_id++){
+            user_movie_id[u_id][m_id] = user_ratings[u_id][m_id].first;
+            user_movie_rating[u_id][m_id] = user_ratings[u_id][m_id].second;
+        }
+    }
+
+
 
     return 0;
 }
@@ -209,10 +232,10 @@ int main(int argc, char** argv){
     // f: datast_user_id -> local_user_id, split form the dataset to
     // reindex users for faster data fetching achieved in regular arrays
     std::unordered_map<int,int> LOCAL_USER_ID;
-    std::vector<std::vector<int>> USER_RATED_MOVIE_ID;
-    std::vector<std::vector<int>> USER_RATINGS;
+    std::vector<std::vector<int>> USER_MOVIE_RATING(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
+    std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
 
-    if(load_user_ratings_train_data(REPO_PATH, LOCAL_USER_ID, USER_RATINGS, USER_RATED_MOVIE_ID)){
+    if(load_user_ratings_train_data(REPO_PATH, LOCAL_USER_ID, USER_MOVIE_RATING, USER_MOVIE_ID)){
         std::cout<<"USER RATINGS TRAINING DATASET NOT FOUND";
         return 3;
     }
@@ -220,10 +243,77 @@ int main(int argc, char** argv){
     float METRIC[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM];
     initialize_hyper_params(METRIC);
 
-    float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
-    int movie_nearest_neighbours[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
+    for(int u_id = 0; u_id < 20; u_id++)
+    {
+        
+        int useri_id = 1;
+   
+        float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
 
-    argsort_scaled_distances(movie_nearest_neighbours, movie_distance_tensor, MOVIE_DISTANCE_COEFFICIENTS_TENSOR, METRIC[0]);
+        // f: "movie_id_1 - 1" -> ( g: "X'th nearest to movie_1_id" -> "movie_2_id" )
+        int movie_nearest_neighbours[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};        
 
+        // f: "movie_validation_id" -> (g: "X'th nearest" -> "rating")
+        int training_nearest_neighbours_rating[TRAIN_NUM_OF_MOVIES-TRAIN_ID_SPLIT][MAX_NEIGH] = {0};
+
+        int max_accuracy = 0;
+        int max_acc_param_id = 0;
+        int max_acc_nei_count = 2;
+        for(int metric_id = 0; metric_id < HYPER_PARAMS_COMBINATIONS; metric_id++){
+            
+            argsort_scaled_distances(movie_nearest_neighbours, movie_distance_tensor, MOVIE_DISTANCE_COEFFICIENTS_TENSOR, METRIC[metric_id]);
+
+            int found_neighbours = 0;
+            int current_gloabl_neighbour = 1;
+            int* local_movie_id = 0;
+
+            int current_accuracy = 0;
+
+            for(int movie_valid_id = TRAIN_ID_SPLIT; movie_valid_id < TRAIN_NUM_OF_MOVIES; movie_valid_id++){
+                
+                while(found_neighbours < MAX_NEIGH){
+                    local_movie_id = std::find(&USER_MOVIE_ID[u_id][0], &USER_MOVIE_ID[u_id][TRAIN_ID_SPLIT], 
+                            movie_nearest_neighbours[USER_MOVIE_ID[u_id][movie_valid_id]-1][current_gloabl_neighbour]);
+                    
+                    if(*local_movie_id != USER_MOVIE_ID[u_id][TRAIN_ID_SPLIT]){
+                        training_nearest_neighbours_rating[movie_valid_id-TRAIN_ID_SPLIT][found_neighbours] = 
+                            *(&USER_MOVIE_RATING[u_id][0] + (local_movie_id - &USER_MOVIE_ID[u_id][0]));
+                        found_neighbours++;
+                    }
+
+                    current_gloabl_neighbour++;
+                }                
+                current_gloabl_neighbour=0;
+                found_neighbours=0;
+            }
+
+            for(int max_nei = 2; max_nei < MAX_NEIGH; max_nei++){
+                
+                current_accuracy = 0;
+                for(int valid_movie_id = 0; valid_movie_id < TRAIN_NUM_OF_MOVIES - TRAIN_ID_SPLIT; valid_movie_id++){
+
+                    int temp_sum = 0;
+
+                    for(int nei_count = 0; nei_count < max_nei; nei_count++){
+                        temp_sum += training_nearest_neighbours_rating[valid_movie_id][nei_count];
+                    }
+
+                    if(int(round(temp_sum/max_nei)) == USER_MOVIE_RATING[u_id][valid_movie_id+TRAIN_ID_SPLIT]) current_accuracy++;
+                    
+                }
+                
+                if(current_accuracy > max_accuracy){
+                    max_accuracy = current_accuracy;
+                    max_acc_param_id = metric_id;
+                    max_acc_nei_count = max_nei;
+                }
+            }         
+
+        }
+
+        std::cout<<"local user id: "<<u_id<<", \tmax acc: "<<max_accuracy<<",\tbest param id: "<<max_acc_param_id<<",\tbest nei count: "<<max_acc_nei_count<<"\n";
+    }
+
+    
     return 0;
 }
