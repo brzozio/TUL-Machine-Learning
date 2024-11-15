@@ -212,42 +212,29 @@ inline void initialize_hyper_params(float (&params)[HYPER_PARAMS_COMBINATIONS][H
     }}}}}
 }
 
-int main(int argc, char** argv){
 
-    const std::string REPO_PATH = get_repository_path();    
-    if(REPO_PATH == "") {
-        std::cout<<"UNSUPPORTED REPO STRUCTURE";
-        return 1;
-    }
+// "temporarily" as global variables because i'm too tierd to pretend to know
+// why threads won't deploy even tough functions work corretcly when called manually
 
-    // indexes are swapped to capitalize on prefetching and
-    // loop unrolling via parralelization of linear combinations
-    std::vector<std::vector<std::vector<float>>> MOVIE_DISTANCE_COEFFICIENTS_TENSOR;
+float METRIC[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM];
 
-    if(load_movie_realtive_distances(REPO_PATH,MOVIE_DISTANCE_COEFFICIENTS_TENSOR)){
-        std::cout<<"MOVIE RELATIVE DISTANCES COEFFICIENT DATASET NOT FOUND";
-        return 2;
-    }
+// f: datast_user_id -> local_user_id, split form the dataset to
+// reindex users for faster data fetching achieved in regular arrays
+std::unordered_map<int,int> LOCAL_USER_ID;
+std::vector<std::vector<int>> USER_MOVIE_RATING(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
+std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
+
+// indexes are swapped to capitalize on prefetching and
+// loop unrolling via parralelization of linear combinations
+std::vector<std::vector<std::vector<float>>> MOVIE_DISTANCE_COEFFICIENTS_TENSOR;
+
+
+void training_loop(const int &u_id_begin, const int &u_id_end){//, const std::vector<std::vector<std::vector<float>>> &MOVIE_DISTANCE_COEFFICIENTS_TENSOR,
+        // const float (&METRIC)[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM], const std::vector<std::vector<int>> &USER_MOVIE_ID,
+        // const std::vector<std::vector<int>> &USER_MOVIE_RATING){
     
-    // f: datast_user_id -> local_user_id, split form the dataset to
-    // reindex users for faster data fetching achieved in regular arrays
-    std::unordered_map<int,int> LOCAL_USER_ID;
-    std::vector<std::vector<int>> USER_MOVIE_RATING(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
-    std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
+    for(int u_id = u_id_begin; u_id < u_id_end; u_id++){
 
-    if(load_user_ratings_train_data(REPO_PATH, LOCAL_USER_ID, USER_MOVIE_RATING, USER_MOVIE_ID)){
-        std::cout<<"USER RATINGS TRAINING DATASET NOT FOUND";
-        return 3;
-    }
-
-    float METRIC[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM];
-    initialize_hyper_params(METRIC);
-
-    for(int u_id = 0; u_id < 20; u_id++)
-    {
-        
-        int useri_id = 1;
-   
         float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
 
         // f: "movie_id_1 - 1" -> ( g: "X'th nearest to movie_1_id" -> "movie_2_id" )
@@ -265,14 +252,15 @@ int main(int argc, char** argv){
 
             int found_neighbours = 0;
             int current_gloabl_neighbour = 1;
-            int* local_movie_id = 0;
+            //int* local_movie_id = 0;
 
             int current_accuracy = 0;
 
             for(int movie_valid_id = TRAIN_ID_SPLIT; movie_valid_id < TRAIN_NUM_OF_MOVIES; movie_valid_id++){
                 
                 while(found_neighbours < MAX_NEIGH){
-                    local_movie_id = std::find(&USER_MOVIE_ID[u_id][0], &USER_MOVIE_ID[u_id][TRAIN_ID_SPLIT], 
+                    
+                    auto local_movie_id = std::find(&USER_MOVIE_ID[u_id][0], &USER_MOVIE_ID[u_id][TRAIN_ID_SPLIT], 
                             movie_nearest_neighbours[USER_MOVIE_ID[u_id][movie_valid_id]-1][current_gloabl_neighbour]);
                     
                     if(*local_movie_id != USER_MOVIE_ID[u_id][TRAIN_ID_SPLIT]){
@@ -313,7 +301,38 @@ int main(int argc, char** argv){
 
         std::cout<<"local user id: "<<u_id<<", \tmax acc: "<<max_accuracy<<",\tbest param id: "<<max_acc_param_id<<",\tbest nei count: "<<max_acc_nei_count<<"\n";
     }
+}
 
+int main(int argc, char** argv){
+
+    const std::string REPO_PATH = get_repository_path();    
+    if(REPO_PATH == "") {
+        std::cout<<"UNSUPPORTED REPO STRUCTURE";
+        return 1;
+    }
+
+
+    if(load_movie_realtive_distances(REPO_PATH,MOVIE_DISTANCE_COEFFICIENTS_TENSOR)){
+        std::cout<<"MOVIE RELATIVE DISTANCES COEFFICIENT DATASET NOT FOUND";
+        return 2;
+    }
     
+
+    if(load_user_ratings_train_data(REPO_PATH, LOCAL_USER_ID, USER_MOVIE_RATING, USER_MOVIE_ID)){
+        std::cout<<"USER RATINGS TRAINING DATASET NOT FOUND";
+        return 3;
+    }
+
+    initialize_hyper_params(METRIC);
+
+    auto thread0 = std::async(std::launch::async, training_loop, 0, 40);
+    auto thread1 = std::async(std::launch::async, training_loop, 40, 80);
+    auto thread2 = std::async(std::launch::async, training_loop, 120, 160);
+    auto thread3 = std::async(std::launch::async, training_loop, 160, 200);
+    auto thread4 = std::async(std::launch::async, training_loop, 240, 280);
+    auto thread5 = std::async(std::launch::async, training_loop, 280, 320);
+    auto thread6 = std::async(std::launch::async, training_loop, 320, 358);
+
+
     return 0;
 }
