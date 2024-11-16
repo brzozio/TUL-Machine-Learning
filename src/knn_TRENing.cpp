@@ -15,7 +15,7 @@
     #define TRAIN_NUM_OF_MOVIES 90
 
 // free to configure training parameters
-    #define HYPER_PARAM_COUNT 21
+    #define HYPER_PARAM_COUNT 31
     #define MAX_NEIGH 10
     #define THREAD_COUNT 12
     // must not exceed TRAIN_NUM_OF_MOVIES
@@ -280,7 +280,7 @@ void parallel_training_loop(const int metric_id_begin, const int metric_id_end, 
                 found_neighbours=0;
             }
 
-            for(int max_nei = 1; max_nei < MAX_NEIGH; max_nei++){
+            for(int max_nei = MAX_NEIGH - 1; max_nei >= 1; max_nei--){
                 
                 current_accuracy = 0;
                 for(int valid_movie_id = 0; valid_movie_id < TRAIN_NUM_OF_MOVIES - TRAIN_ID_SPLIT; valid_movie_id++){
