@@ -7,23 +7,30 @@
 #include <unordered_map>
 #include <random>
 #include <future>
-// #include <chrono>
 
-#define NUM_OF_FEATURES 5
-#define NUM_OF_MOVIES 200
+// dataset derived constants
+    #define NUM_OF_FEATURES 5
+    #define NUM_OF_MOVIES 200
+    #define NUM_OF_USERS 358
+    #define TRAIN_NUM_OF_MOVIES 90
 
-#define HYPER_PARAMS_DIM 5
-#define HYPER_PARAMS_VALUES { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 }
-#define HPR 6
-constexpr int HYPER_PARAMS_COMBINATIONS = HPR*(HPR+1)*(HPR+2)*(HPR+3)/24;
+// free to configure training parameters
+    #define HYPER_PARAM_COUNT 21
+    #define MAX_NEIGH 10
+    #define THREAD_COUNT 12
+    // must not exceed TRAIN_NUM_OF_MOVIES
+    #define TRAIN_ID_SPLIT 80
 
-#define TRAIN_ID_SPLIT 80
-#define TRAIN_NUM_OF_MOVIES 90
-#define MAX_NEIGH 6
+// user configuration derived constants
+    constexpr std::array<float, HYPER_PARAM_COUNT> HYPER_PARAMS_VALUES = [](){
+        std::array<float, HYPER_PARAM_COUNT> temp;
+        for(int param_id = 0; param_id < HYPER_PARAM_COUNT; param_id++){
+            temp[param_id] = float(param_id)/float(HYPER_PARAM_COUNT-1);
+        }
+        return temp;
+    }();
+    constexpr int HYPER_PARAMS_COMBINATIONS = HYPER_PARAM_COUNT*(HYPER_PARAM_COUNT+1)*(HYPER_PARAM_COUNT+2)*(HYPER_PARAM_COUNT+3)/24;
 
-#define NUM_OF_USERS 358
-
-#define THREAD_COUNT 12
 
 std::string get_repository_path(){    
     std::string repo_path = std::filesystem::current_path().generic_string();
@@ -31,11 +38,6 @@ std::string get_repository_path(){
     if (found_at!=std::string::npos) return std::string(repo_path, 0, found_at+1);
     return "";
 }
-
-struct movie_rating{
-    int m_id;
-    int rating;
-};
 
 // calculates the relative distances of all pairs of movies in 'distance_coefficients'
 // as a linear combination of relative distance coefficients and the provided 'metric'
@@ -199,8 +201,8 @@ inline int load_user_ratings_train_data(const std::string &REPO_PATH,
     return 0;
 }
 
-inline void initialize_hyper_params(float (&params)[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM]){
-    std::array<float,HPR> hiparams = HYPER_PARAMS_VALUES;
+inline void initialize_hyper_params(float (&params)[HYPER_PARAMS_COMBINATIONS][NUM_OF_FEATURES]){
+    std::array<float,HYPER_PARAM_COUNT> hiparams = HYPER_PARAMS_VALUES;
     
     int param_id = 0;
     for(auto x0: hiparams){for(auto x1: hiparams){for(auto x2: hiparams){for(auto x3: hiparams){for(auto x4: hiparams){
@@ -216,27 +218,22 @@ inline void initialize_hyper_params(float (&params)[HYPER_PARAMS_COMBINATIONS][H
 }
 
 
-// "temporarily" as global variables because i'm too tierd to pretend to know
-// why threads won't deploy even tough functions work corretcly when called manually
+// "temporarily" as global variables because I don't want to break
+// working code when migrating references to pointers
 
-float METRIC[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM];
-
-// f: datast_user_id -> local_user_id, split form the dataset to
-// reindex users for faster data fetching achieved in regular arrays
-std::vector<int> LOCAL_USER_ID(NUM_OF_USERS);
-std::vector<std::vector<int>> USER_MOVIE_RATING(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
-std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
-
-// indexes are swapped to capitalize on prefetching and
-// loop unrolling via parralelization of linear combinations
-std::vector<std::vector<std::vector<float>>> MOVIE_DISTANCE_COEFFICIENTS_TENSOR;
+    float METRIC[HYPER_PARAMS_COMBINATIONS][NUM_OF_FEATURES];
+    // f: [0, NUM_OF_USERS-1] -> "user_id"
+    std::vector<int> LOCAL_USER_ID(NUM_OF_USERS);
+    std::vector<std::vector<int>> USER_MOVIE_RATING(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
+    std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
+    // indexes are swapped to capitalize on prefetching and
+    // loop unrolling via parralelization of linear combinations
+    std::vector<std::vector<std::vector<float>>> MOVIE_DISTANCE_COEFFICIENTS_TENSOR;
 
 
-void parallel_training_loop(const int metric_id_begin, const int metric_id_end, const void *training_results_ptr){//, const std::vector<std::vector<std::vector<float>>> &MOVIE_DISTANCE_COEFFICIENTS_TENSOR,
-        // const float (&METRIC)[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM], const std::vector<std::vector<int>> &USER_MOVIE_ID,
-        // const std::vector<std::vector<int>> &USER_MOVIE_RATING){
+void parallel_training_loop(const int metric_id_begin, const int metric_id_end, const void *training_results_ptr){
 
-    std::vector<std::vector<float>> *training_results = (std::vector<std::vector<float>>*)training_results_ptr;
+    std::vector<std::vector<int>> *training_results = (std::vector<std::vector<int>>*)training_results_ptr;
 
     float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
 
@@ -260,6 +257,7 @@ void parallel_training_loop(const int metric_id_begin, const int metric_id_end, 
         for(int u_id = 0; u_id < NUM_OF_USERS; u_id++){
 
             found_neighbours = 0;
+            // offset to 1 to exclude self similarity
             current_gloabl_neighbour = 1;
             current_accuracy = 0;
 
@@ -282,7 +280,7 @@ void parallel_training_loop(const int metric_id_begin, const int metric_id_end, 
                 found_neighbours=0;
             }
 
-            for(int max_nei = 2; max_nei < MAX_NEIGH; max_nei++){
+            for(int max_nei = 1; max_nei < MAX_NEIGH; max_nei++){
                 
                 current_accuracy = 0;
                 for(int valid_movie_id = 0; valid_movie_id < TRAIN_NUM_OF_MOVIES - TRAIN_ID_SPLIT; valid_movie_id++){
@@ -306,37 +304,60 @@ void parallel_training_loop(const int metric_id_begin, const int metric_id_end, 
     }
 }
 
+inline void compile_results(std::array<std::string, NUM_OF_USERS> &output_data, std::vector<std::vector<std::vector<int>>> &training_results){
+
+    for(int u_id = 0; u_id < NUM_OF_USERS; u_id++){
+        for(int worker_id = 1; worker_id < THREAD_COUNT; worker_id++){
+            if(training_results[worker_id][u_id][0] > training_results[0][u_id][0]){
+                for(int i = 0; i < training_results[0][0].size(); i++){
+                    training_results[0][u_id][i] = training_results[worker_id][u_id][i];
+                }
+            }
+        }
+    }
+
+    for(int u_id = 0; u_id < NUM_OF_USERS; u_id++){
+        output_data[u_id].append(std::to_string(LOCAL_USER_ID[u_id]));
+        output_data[u_id].append(";");
+        output_data[u_id].append(std::to_string(training_results[0][u_id][2]));
+        output_data[u_id].append(";");
+        for(int param_id = 0; param_id < NUM_OF_FEATURES - 1; param_id++){
+            output_data[u_id].append(std::to_string( METRIC[training_results[0][u_id][1]][param_id] ));
+            output_data[u_id].append(";");
+        }
+        output_data[u_id].append(std::to_string(METRIC[training_results[0][u_id][1]][NUM_OF_FEATURES - 1]));
+    }
+}
+
 int main(int argc, char** argv){
 
     const std::string REPO_PATH = get_repository_path();    
     if(REPO_PATH == "") {
-        std::cout<<"UNSUPPORTED REPO STRUCTURE";
+        std::cerr<<"UNSUPPORTED REPO STRUCTURE";
         return 1;
     }
 
 
     if(load_movie_realtive_distances(REPO_PATH, MOVIE_DISTANCE_COEFFICIENTS_TENSOR)){
-        std::cout<<"MOVIE RELATIVE DISTANCES COEFFICIENT DATASET NOT FOUND";
+        std::cerr<<"MOVIE RELATIVE DISTANCES COEFFICIENT DATASET NOT FOUND";
         return 2;
     }
     
 
     if(load_user_ratings_train_data(REPO_PATH, LOCAL_USER_ID, USER_MOVIE_RATING, USER_MOVIE_ID)){
-        std::cout<<"USER RATINGS TRAINING DATASET NOT FOUND";
+        std::cerr<<"USER RATINGS TRAINING DATASET NOT FOUND";
         return 3;
     }
 
     initialize_hyper_params(METRIC);
 
     // f: "thread_id" -> ( g: "local_u_id" -> ( h: {0, 1, 2} -> {"accuracy", "metric_id", "neighbour_count"} ))
-    std::vector<std::vector<std::vector<float>>> training_results(
-        THREAD_COUNT, std::vector<std::vector<float>>(NUM_OF_USERS, std::vector<float>(3)));
+    std::vector<std::vector<std::vector<int>>> training_results(
+        THREAD_COUNT, std::vector<std::vector<int>>(NUM_OF_USERS, std::vector<int>(3)));
 
     std::vector<std::thread> worker_threads;
 
     constexpr int thread_workload = HYPER_PARAMS_COMBINATIONS / THREAD_COUNT;
-
-    // auto start = std::chrono::high_resolution_clock::now();
 
     for(int thread_id = 0; thread_id < (THREAD_COUNT-1); thread_id ++){
         worker_threads.push_back(std::thread(parallel_training_loop, thread_id*thread_workload, (thread_id+1)*thread_workload, &training_results[thread_id]));
@@ -347,16 +368,21 @@ int main(int argc, char** argv){
         threads.join();
     }
 
-    // auto end = std::chrono::high_resolution_clock::now();
+    std::array<std::string, NUM_OF_USERS> output_data{""}; 
 
-    for(auto &worker: training_results){
-        for(int user = 140; user < 150; user++){
-            std::cout<<"uid: "<<user<<",\tacc: "<<worker[user][0]<<"\n";
-        }
-        std::cout<<"\nnext worker\n";
+    compile_results(output_data, training_results);
+
+    std::ofstream output_stream(REPO_PATH + "csv/TRENNING_PARAMETERS.csv");
+    if (!output_stream.is_open()){
+        std::cerr<<"FAILED TO OPEN OUTPUT FILE";
+        return 4;
     }
 
-    // std::cout<<"\nTraining Loop Execution Time:\t"<<end-start<<"\n\n";
+    for(auto &s: output_data){
+        output_stream<<s<<"\n";
+    }
+
+    output_stream.close();
 
     return 0;
 }
