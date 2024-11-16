@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <random>
 #include <future>
+// #include <chrono>
 
 #define NUM_OF_FEATURES 5
 #define NUM_OF_MOVIES 200
@@ -14,13 +15,15 @@
 #define HYPER_PARAMS_DIM 5
 #define HYPER_PARAMS_VALUES { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 }
 #define HPR 6
-#define HYPER_PARAMS_COMBINATIONS HPR*(HPR+1)*(HPR+2)*(HPR+3)/24
+constexpr int HYPER_PARAMS_COMBINATIONS = HPR*(HPR+1)*(HPR+2)*(HPR+3)/24;
 
 #define TRAIN_ID_SPLIT 80
 #define TRAIN_NUM_OF_MOVIES 90
 #define MAX_NEIGH 6
 
 #define NUM_OF_USERS 358
+
+#define THREAD_COUNT 12
 
 std::string get_repository_path(){    
     std::string repo_path = std::filesystem::current_path().generic_string();
@@ -110,7 +113,7 @@ inline int load_movie_realtive_distances(const std::string &REPO_PATH, std::vect
 }
 
 inline int load_user_ratings_train_data(const std::string &REPO_PATH, 
-    std::unordered_map<int,int> &local_user_id, std::vector<std::vector<int>> &user_movie_rating, std::vector<std::vector<int>> &user_movie_id){ 
+    std::vector<int> &local_user_id, std::vector<std::vector<int>> &user_movie_rating, std::vector<std::vector<int>> &user_movie_id){ 
 
     std::ifstream file_user_ratings_train(REPO_PATH + "csv/train.csv");
     if (!file_user_ratings_train.is_open()) return 1;
@@ -134,7 +137,7 @@ inline int load_user_ratings_train_data(const std::string &REPO_PATH,
 
         std::getline(string_stream, loaded_string, ';');        
         loaded_value = std::stoi(loaded_string);
-        local_user_id[loaded_value] = current_local_user_id;
+        local_user_id[current_local_user_id] = loaded_value;
 
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
@@ -156,10 +159,10 @@ inline int load_user_ratings_train_data(const std::string &REPO_PATH,
 
         std::getline(string_stream, loaded_string, ';');
         loaded_value = std::stoi(loaded_string);
-        if(local_user_id.find(loaded_value) == local_user_id.end()){
+        if(local_user_id[current_local_user_id] != loaded_value){
 
             current_local_user_id++;
-            local_user_id[loaded_value] = current_local_user_id;
+            local_user_id[current_local_user_id] = loaded_value;
 
             user_ratings.push_back(current_user_ratings);
             current_user_ratings.resize(0);
@@ -220,7 +223,7 @@ float METRIC[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM];
 
 // f: datast_user_id -> local_user_id, split form the dataset to
 // reindex users for faster data fetching achieved in regular arrays
-std::unordered_map<int,int> LOCAL_USER_ID;
+std::vector<int> LOCAL_USER_ID(NUM_OF_USERS);
 std::vector<std::vector<int>> USER_MOVIE_RATING(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
 std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN_NUM_OF_MOVIES));
 
@@ -229,32 +232,36 @@ std::vector<std::vector<int>> USER_MOVIE_ID(NUM_OF_USERS, std::vector<int>(TRAIN
 std::vector<std::vector<std::vector<float>>> MOVIE_DISTANCE_COEFFICIENTS_TENSOR;
 
 
-void training_loop(const int &u_id_begin, const int &u_id_end){//, const std::vector<std::vector<std::vector<float>>> &MOVIE_DISTANCE_COEFFICIENTS_TENSOR,
+void parallel_training_loop(const int metric_id_begin, const int metric_id_end, const void *training_results_ptr){//, const std::vector<std::vector<std::vector<float>>> &MOVIE_DISTANCE_COEFFICIENTS_TENSOR,
         // const float (&METRIC)[HYPER_PARAMS_COMBINATIONS][HYPER_PARAMS_DIM], const std::vector<std::vector<int>> &USER_MOVIE_ID,
         // const std::vector<std::vector<int>> &USER_MOVIE_RATING){
+
+    std::vector<std::vector<float>> *training_results = (std::vector<std::vector<float>>*)training_results_ptr;
+
+    float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
+
+    // f: "movie_id_1 - 1" -> ( g: "X'th nearest to movie_1_id" -> "movie_2_id" )
+    int movie_nearest_neighbours[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};        
+
+    // f: "movie_validation_id" -> (g: "X'th nearest" -> "rating")
+    int training_nearest_neighbours_rating[TRAIN_NUM_OF_MOVIES-TRAIN_ID_SPLIT][MAX_NEIGH] = {0};
+
     
-    for(int u_id = u_id_begin; u_id < u_id_end; u_id++){
+    int temp_sum = 0;
+    int found_neighbours = 0;
+    int current_gloabl_neighbour = 1;
 
-        float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
+    int current_accuracy = 0;
 
-        // f: "movie_id_1 - 1" -> ( g: "X'th nearest to movie_1_id" -> "movie_2_id" )
-        int movie_nearest_neighbours[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};        
+    for(int metric_id = metric_id_begin; metric_id < metric_id_end; metric_id++){
+        
+        argsort_scaled_distances(movie_nearest_neighbours, movie_distance_tensor, MOVIE_DISTANCE_COEFFICIENTS_TENSOR, METRIC[metric_id]);
 
-        // f: "movie_validation_id" -> (g: "X'th nearest" -> "rating")
-        int training_nearest_neighbours_rating[TRAIN_NUM_OF_MOVIES-TRAIN_ID_SPLIT][MAX_NEIGH] = {0};
+        for(int u_id = 0; u_id < NUM_OF_USERS; u_id++){
 
-        int max_accuracy = 0;
-        int max_acc_param_id = 0;
-        int max_acc_nei_count = 2;
-        for(int metric_id = 0; metric_id < HYPER_PARAMS_COMBINATIONS; metric_id++){
-            
-            argsort_scaled_distances(movie_nearest_neighbours, movie_distance_tensor, MOVIE_DISTANCE_COEFFICIENTS_TENSOR, METRIC[metric_id]);
-
-            int found_neighbours = 0;
-            int current_gloabl_neighbour = 1;
-            //int* local_movie_id = 0;
-
-            int current_accuracy = 0;
+            found_neighbours = 0;
+            current_gloabl_neighbour = 1;
+            current_accuracy = 0;
 
             for(int movie_valid_id = TRAIN_ID_SPLIT; movie_valid_id < TRAIN_NUM_OF_MOVIES; movie_valid_id++){
                 
@@ -279,9 +286,8 @@ void training_loop(const int &u_id_begin, const int &u_id_end){//, const std::ve
                 
                 current_accuracy = 0;
                 for(int valid_movie_id = 0; valid_movie_id < TRAIN_NUM_OF_MOVIES - TRAIN_ID_SPLIT; valid_movie_id++){
-
-                    int temp_sum = 0;
-
+                    
+                    temp_sum = 0;
                     for(int nei_count = 0; nei_count < max_nei; nei_count++){
                         temp_sum += training_nearest_neighbours_rating[valid_movie_id][nei_count];
                     }
@@ -290,16 +296,13 @@ void training_loop(const int &u_id_begin, const int &u_id_end){//, const std::ve
                     
                 }
                 
-                if(current_accuracy > max_accuracy){
-                    max_accuracy = current_accuracy;
-                    max_acc_param_id = metric_id;
-                    max_acc_nei_count = max_nei;
+                if(current_accuracy > (*training_results)[u_id][0]){
+                    (*training_results)[u_id][0] = current_accuracy;
+                    (*training_results)[u_id][1] = metric_id;
+                    (*training_results)[u_id][2] = max_nei;
                 }
-            }         
-
+            }
         }
-
-        std::cout<<"local user id: "<<u_id<<", \tmax acc: "<<max_accuracy<<",\tbest param id: "<<max_acc_param_id<<",\tbest nei count: "<<max_acc_nei_count<<"\n";
     }
 }
 
@@ -312,7 +315,7 @@ int main(int argc, char** argv){
     }
 
 
-    if(load_movie_realtive_distances(REPO_PATH,MOVIE_DISTANCE_COEFFICIENTS_TENSOR)){
+    if(load_movie_realtive_distances(REPO_PATH, MOVIE_DISTANCE_COEFFICIENTS_TENSOR)){
         std::cout<<"MOVIE RELATIVE DISTANCES COEFFICIENT DATASET NOT FOUND";
         return 2;
     }
@@ -325,14 +328,35 @@ int main(int argc, char** argv){
 
     initialize_hyper_params(METRIC);
 
-    auto thread0 = std::async(std::launch::async, training_loop, 0, 40);
-    auto thread1 = std::async(std::launch::async, training_loop, 40, 80);
-    auto thread2 = std::async(std::launch::async, training_loop, 120, 160);
-    auto thread3 = std::async(std::launch::async, training_loop, 160, 200);
-    auto thread4 = std::async(std::launch::async, training_loop, 240, 280);
-    auto thread5 = std::async(std::launch::async, training_loop, 280, 320);
-    auto thread6 = std::async(std::launch::async, training_loop, 320, 358);
+    // f: "thread_id" -> ( g: "local_u_id" -> ( h: {0, 1, 2} -> {"accuracy", "metric_id", "neighbour_count"} ))
+    std::vector<std::vector<std::vector<float>>> training_results(
+        THREAD_COUNT, std::vector<std::vector<float>>(NUM_OF_USERS, std::vector<float>(3)));
 
+    std::vector<std::thread> worker_threads;
+
+    constexpr int thread_workload = HYPER_PARAMS_COMBINATIONS / THREAD_COUNT;
+
+    // auto start = std::chrono::high_resolution_clock::now();
+
+    for(int thread_id = 0; thread_id < (THREAD_COUNT-1); thread_id ++){
+        worker_threads.push_back(std::thread(parallel_training_loop, thread_id*thread_workload, (thread_id+1)*thread_workload, &training_results[thread_id]));
+    }
+    worker_threads.push_back(std::thread(parallel_training_loop, (THREAD_COUNT-1)*thread_workload, HYPER_PARAMS_COMBINATIONS, &training_results[THREAD_COUNT-1]));
+
+    for(auto &threads: worker_threads){
+        threads.join();
+    }
+
+    // auto end = std::chrono::high_resolution_clock::now();
+
+    for(auto &worker: training_results){
+        for(int user = 140; user < 150; user++){
+            std::cout<<"uid: "<<user<<",\tacc: "<<worker[user][0]<<"\n";
+        }
+        std::cout<<"\nnext worker\n";
+    }
+
+    // std::cout<<"\nTraining Loop Execution Time:\t"<<end-start<<"\n\n";
 
     return 0;
 }
