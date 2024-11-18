@@ -215,12 +215,11 @@ inline void initialize_hyper_params(float (&params)[HYPER_PARAMS_COMBINATIONS][N
     }}}}}
 }
 
-void parallel_training_loop(const int metric_id_begin, const int metric_id_end, const void *training_results_ptr,
+void parallel_training_loop(const int metric_id_begin, const int metric_id_end, 
+    std::vector<std::vector<int>> &training_results,
     const std::vector<std::vector<std::vector<float>>> &MOVIE_DISTANCE_COEFFICIENTS_TENSOR, 
     const float (&METRIC)[HYPER_PARAMS_COMBINATIONS][NUM_OF_FEATURES],
     const std::vector<std::vector<int>> &USER_MOVIE_RATING, const std::vector<std::vector<int>> &USER_MOVIE_ID){
-
-    std::vector<std::vector<int>> *training_results = (std::vector<std::vector<int>>*)training_results_ptr;
 
     float movie_distance_tensor[NUM_OF_MOVIES][NUM_OF_MOVIES] = {0};
 
@@ -281,10 +280,10 @@ void parallel_training_loop(const int metric_id_begin, const int metric_id_end, 
                     
                 }
                 
-                if(current_accuracy > (*training_results)[u_id][0]){
-                    (*training_results)[u_id][0] = current_accuracy;
-                    (*training_results)[u_id][1] = metric_id;
-                    (*training_results)[u_id][2] = max_nei;
+                if(current_accuracy > training_results[u_id][0]){
+                    training_results[u_id][0] = current_accuracy;
+                    training_results[u_id][1] = metric_id;
+                    training_results[u_id][2] = max_nei;
                 }
             }
         }
@@ -372,12 +371,12 @@ int main(int argc, char** argv){
 
     for(int thread_id = 0; thread_id < (THREAD_COUNT-1); thread_id ++){
         worker_threads.emplace_back(std::async(std::launch::async, parallel_training_loop, thread_id*thread_workload, 
-            (thread_id+1)*thread_workload, &training_results[thread_id], std::cref(MOVIE_DISTANCE_COEFFICIENTS_TENSOR), 
+            (thread_id+1)*thread_workload, std::ref(training_results[thread_id]), std::cref(MOVIE_DISTANCE_COEFFICIENTS_TENSOR), 
             std::cref(METRIC), std::cref(USER_MOVIE_RATING), std::cref(USER_MOVIE_ID)));
     }
     
     worker_threads.emplace_back(std::async(std::launch::async, parallel_training_loop, (THREAD_COUNT-1)*thread_workload, 
-        HYPER_PARAMS_COMBINATIONS, &training_results[THREAD_COUNT-1], std::cref(MOVIE_DISTANCE_COEFFICIENTS_TENSOR),
+        HYPER_PARAMS_COMBINATIONS, std::ref(training_results[THREAD_COUNT-1]), std::cref(MOVIE_DISTANCE_COEFFICIENTS_TENSOR),
         std::cref(METRIC), std::cref(USER_MOVIE_RATING), std::cref(USER_MOVIE_ID)));
     
     for(auto &threads: worker_threads){
