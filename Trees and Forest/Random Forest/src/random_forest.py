@@ -105,8 +105,7 @@ from json import dump, load
 user_rating_data_predicted : list = []
 user_rating_data_movies: list = []
 
-# NUM_OF_USERS : int = len(user_rating)
-NUM_OF_USERS: int = 1
+NUM_OF_USERS : int = len(user_rating)
 
 for user in range(NUM_OF_USERS):
     
