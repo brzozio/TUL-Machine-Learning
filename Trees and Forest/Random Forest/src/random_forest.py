@@ -36,7 +36,14 @@ def decision_tree(movie_id, all_distances, training_ids, rating_data, threshold,
             decisions.append(rating_data[str(rated_movie)])
 
 
-    return int(np.ceil(np.average(decisions))) if len(decisions) > 0 else 0
+    if len(decisions) == 0:
+        sum = 0
+        for rating in rating_data:
+            sum += rating_data[rating]
+        sum = sum/len(rating_data)
+        return np.round(sum)
+    
+    return int(np.round(np.average(decisions)))
 
 def test_user(user, best_weights, predict_ids, train_ids, num_of_trees) -> tuple[list, list]:
 
