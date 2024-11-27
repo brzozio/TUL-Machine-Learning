@@ -31,26 +31,31 @@ def decision_tree(movie_id, all_distances, training_ids, rating_data, threshold)
 
     for rated_movie in training_ids:
 
-        feature_counter: int = 0
+        feat_dist_i = 0
 
-        for feat_dist_i, feature_distance in enumerate(all_distances[movie_id][int(rated_movie)]):
-
-            if feature_distance < threshold[feat_dist_i]:
-
-                feature_counter += 1
-
-        if feature_counter == 5:
-
-            decisions.append(rating_data[str(rated_movie)])
-            node5 += 1
-        elif feature_counter == 4: 
-            node4 += 1
-        elif feature_counter == 3: 
-            node3 += 1
-        elif feature_counter == 2: 
-            node2 += 1
-        elif feature_counter == 1: 
+        if all_distances[movie_id][int(rated_movie)][0] < threshold[0]:
             node1 += 1
+            if all_distances[movie_id][int(rated_movie)][1] < threshold[1]:
+                node2 += 1
+                if all_distances[movie_id][int(rated_movie)][2] < threshold[2]:
+                    node3 += 1
+                    if all_distances[movie_id][int(rated_movie)][3] < threshold[3]:
+                        node4 += 1
+                        if all_distances[movie_id][int(rated_movie)][4] < threshold[4]:
+                            node5 += 1
+                            decisions.append(rating_data[str(rated_movie)])
+
+        # if feat_dist_i == 4:
+        #     decisions.append(rating_data[str(rated_movie)])
+        #     node5 += 1
+        # elif feat_dist_i == 3: 
+        #     node4 += 1
+        # elif feat_dist_i == 2: 
+        #     node3 += 1
+        # elif feat_dist_i == 1: 
+        #     node2 += 1
+        # elif feat_dist_i == 0: 
+        #     node1 += 1
 
     if len(decisions) == 0:
         sum = 0
@@ -76,9 +81,7 @@ train_ids:   list = list(user_rating['RATED'][9].keys())
 
 returned_movies, returned_reviews = test_user(user=9, best_weights=best_weight, predict_ids=preditc_ids, train_ids=train_ids)
 
-print(user_id)
-print(best_weight)
-print(len(train_ids))
+
 print(node1)
 print(node2)
 print(node3)
