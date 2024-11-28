@@ -59,30 +59,61 @@ std::unordered_map<int, std::unordered_map<int, float>> get_user_distances(const
     
     std::unordered_map<int, std::unordered_map<int, float>> user_user_distance;
 
-    for(auto &primary_user: user_movie_rating){
-        for(auto &secondary_user: user_movie_rating){
+    for(auto &primaryUser: user_movie_rating){
+        for(auto &secondaryUser: user_movie_rating){
 
             int sum_rating_difference = 0;
             int hit_count = 0;
 
-            for(auto &movie_user_1: primary_user.second){
+            for(auto &movie_user_1: primaryUser.second){
 
-                auto movie_user_2 = secondary_user.second.find(movie_user_1.first);
+                auto movie_user_2 = secondaryUser.second.find(movie_user_1.first);
 
-                if(!(movie_user_2 == secondary_user.second.end())){
+                if(!(movie_user_2 == secondaryUser.second.end())){
                     sum_rating_difference += abs(movie_user_1.second - movie_user_2->second);
                     hit_count++;
                 }
             }
 
-            if(hit_count != 0) user_user_distance[primary_user.first][secondary_user.first] = 
-                float(sum_rating_difference) * (1.0 - float(hit_count) / float(primary_user.second.size() + secondary_user.second.size() - hit_count));
+            if(hit_count != 0) user_user_distance[primaryUser.first][secondaryUser.first] = 
+                float(sum_rating_difference) * (1.0 - float(hit_count) / float(primaryUser.second.size() + secondaryUser.second.size() - hit_count));
 
-            else user_user_distance[primary_user.first][secondary_user.first] = -1.0;
+            else user_user_distance[primaryUser.first][secondaryUser.first] = -1.0;
         }
     }
 
     return user_user_distance;
+}
+
+std::unordered_map<int, std::vector<int>> get_user_closest_users(const std::unordered_map<int, std::unordered_map<int, float>> &user_user_distance){
+    std::unordered_map<int, std::vector<int>> user_closetUser_user;
+
+    for(auto &primaryUser: user_user_distance){
+
+        std::vector<std::pair<int, float>> user_distance;
+
+        for(auto &secondaryUser: primaryUser.second){
+            user_distance.push_back(secondaryUser);
+        }
+
+        std::sort(user_distance.begin(), user_distance.end(), 
+            [](const std::pair<int,float> &x1, const std::pair<int,float> &x2){
+                return x1.second < x2.second;
+            });
+
+        int first_valid_uid = 0;
+        while(user_distance[first_valid_uid].first != primaryUser.first){
+            first_valid_uid++;
+        }
+        first_valid_uid++;
+
+        for(int uid = first_valid_uid; uid < user_distance.size(); uid++){
+            user_closetUser_user[primaryUser.first].push_back(user_distance[uid].first);
+        }
+
+    }
+
+    return user_closetUser_user;
 }
 
 int main(int argc, char** argv){
@@ -98,7 +129,6 @@ int main(int argc, char** argv){
     }
 
     // hashmap storage for unified internal and external ID system
-    // L"user_id".L"movie_id"."rating"
     std::unordered_map<int, std::unordered_map<int, int>> USER_MOVIE_RATING;
     std::tie(USER_MOVIE_RATING, ERROR_CODE) = load_user_ratings_train_data(REPO_PATH);
 
@@ -107,37 +137,26 @@ int main(int argc, char** argv){
         return ERROR_CODE;
     }
 
-    // L"primary_user_id".L"n-th_closest_user"."secondary_user_id"
-    auto USER_CLOSEST = get_user_distances(USER_MOVIE_RATING);
+    auto user_user_distance = get_user_distances(USER_MOVIE_RATING);
 
-    // for(auto &primary_hashmap: USER_CLOSEST){
-    //     std::cout<<"\n\n"<<primary_hashmap.first<<":\n";
-    //     for(auto &secondary_hashmap: primary_hashmap.second){
-    //         std::cout<<"("<<secondary_hashmap.first<<":"<<secondary_hashmap.second<<"),  ";
-    //     }
-    // }
-    
-    // const int THREAD_COUNT = [](){
-    //     auto temp = std::thread::hardware_concurrency();
-    //     if(temp > 0) return temp;
-    //     return 1u;
-    // }();
+    auto user_closestUser_user = get_user_closest_users(user_user_distance);
 
-    
-    // std::array<std::string, NUM_OF_USERS> output_data{""}; 
+        
+    std::ofstream output_stream(REPO_PATH + "csv/user_closestUser_user.csv");
+    if (!output_stream.is_open()){
+        std::cerr<<"FAILED TO OPEN OUTPUT FILE";
+        return 3;
+    }
 
+    for(auto &element: user_closestUser_user){
+        output_stream<<element.first<<";";
+        for(auto &mid: element.second){
+            output_stream<<mid<<";";
+        }
+        output_stream<<std::endl;
+    }
 
-    // std::ofstream output_stream(REPO_PATH + "csv/TRENNING_PARAMETERS.csv");
-    // if (!output_stream.is_open()){
-    //     std::cerr<<"FAILED TO OPEN OUTPUT FILE";
-    //     return 4;
-    // }
-
-    // for(auto &s: output_data){
-    //     output_stream<<s<<"\n";
-    // }
-
-    // output_stream.close();
+    output_stream.close();
 
     return ERROR_CODE;
 }
