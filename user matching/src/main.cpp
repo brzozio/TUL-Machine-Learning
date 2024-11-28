@@ -6,19 +6,29 @@
 #include <unordered_map>
 #include <future>
 
-std::pair<std::string, int> get_repository_path(){    
+enum error_code{
+    OK = 0,
+    unexpectedRepositoryStructure = 1,
+    couldNotReadDataFile = 2,
+    couldNotWriteDataFile = 3
+};
+
+std::pair<std::string, error_code> get_repository_path(){    
+
     std::string repo_path = std::filesystem::current_path().generic_string();
     std::size_t found_at = repo_path.find("/src");
-    if (found_at!=std::string::npos) return std::pair(std::string(repo_path, 0, found_at+1), 0);
-    return std::pair("",1);
+
+    if (found_at!=std::string::npos) return std::pair(std::string(repo_path, 0, found_at+1), error_code::OK);
+
+    return std::pair("",error_code::unexpectedRepositoryStructure);
 }
 
-std::pair<std::unordered_map<int, std::unordered_map<int, int>>, int> load_user_ratings_train_data(const std::string &REPO_PATH){ 
+std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> load_user_ratings_train_data(const std::string &REPO_PATH){ 
 
     std::unordered_map<int, std::unordered_map<int, int>> user_movie_rating;
 
     std::ifstream file_user_ratings_train(REPO_PATH + "csv/train.csv");
-    if (!file_user_ratings_train.is_open()) return std::pair(user_movie_rating, 2);
+    if (!file_user_ratings_train.is_open()) return std::pair(user_movie_rating, error_code::couldNotReadDataFile);
     
 
     std::string line;    
@@ -48,7 +58,36 @@ std::pair<std::unordered_map<int, std::unordered_map<int, int>>, int> load_user_
 
     }
 
-    return std::pair(user_movie_rating, 0);
+    return std::pair(user_movie_rating, error_code::OK);
+}
+
+std::pair<std::vector<std::vector<int>>, error_code> load_task(const std::string &REPO_PATH){
+
+    std::vector<std::vector<int>> task_data;
+
+    std::ifstream file_user_ratings_train(REPO_PATH + "csv/task.csv");
+    if (!file_user_ratings_train.is_open()) return std::pair(task_data, error_code::couldNotReadDataFile);
+    
+    std::string loaded_line;
+    std::string loaded_string;
+
+    while(std::getline(file_user_ratings_train,loaded_line)){
+        
+        std::vector<int> loaded_values;
+        std::stringstream string_stream(loaded_line); 
+
+        //loading integers up to NaN at the end of each line
+        std::getline(string_stream, loaded_string, ';');
+        loaded_values.push_back(std::stoi(loaded_string));
+        std::getline(string_stream, loaded_string, ';');
+        loaded_values.push_back(std::stoi(loaded_string));
+        std::getline(string_stream, loaded_string, ';');
+        loaded_values.push_back(std::stoi(loaded_string));
+
+        task_data.push_back(loaded_values);
+    }
+    
+    return std::pair(task_data, error_code::OK);
 }
 
 // for each user computes the rating distance to all other users defined as a
@@ -116,47 +155,73 @@ std::unordered_map<int, std::vector<int>> get_user_closest_users(const std::unor
     return user_closetUser_user;
 }
 
+error_code predict_rating(const std::string &REPO_PATH,
+const std::unordered_map<int, std::vector<int>> &user_closestUser_user, const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
+
+    error_code ERROR_CODE = error_code::OK;
+    std::vector<std::vector<int>> USER_MOVIE_TASK;
+
+    std::tie(USER_MOVIE_TASK, ERROR_CODE) = load_task(REPO_PATH);
+    if(ERROR_CODE){
+        std::cerr<<"USER RATINGS TASK DATASET NOT FOUND";
+        return ERROR_CODE;
+    }
+
+    std::ofstream output_stream(REPO_PATH + "csv/submission.csv");
+    if (!output_stream.is_open()){
+        std::cerr<<"FAILED TO OPEN OUTPUT FILE";
+        return error_code::couldNotWriteDataFile;
+    }
+
+    for(auto &entry: USER_MOVIE_TASK){
+        for(auto &element: entry){
+            output_stream<<element<<";";
+        }
+
+        int closest_match = 0;
+        auto iskey = user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).find(entry[2]);
+
+        while(iskey == user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).end()){
+            
+            closest_match++;
+            iskey = user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).find(entry[2]);
+
+        }
+
+        output_stream<<user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).at(entry[2])<<std::endl;
+    }
+
+    return error_code::OK;
+}
+
 int main(int argc, char** argv){
 
-    int ERROR_CODE = 0;
+    error_code ERROR_CODE = error_code::OK;
 
     std::string REPO_PATH = "";
     std::tie(REPO_PATH, ERROR_CODE) = get_repository_path();
-
     if(ERROR_CODE) {
-        std::cerr<<"UNSUPPORTED REPO STRUCTURE";
+        std::cerr<<ERROR_CODE;
         return ERROR_CODE;
     }
 
     // hashmap storage for unified internal and external ID system
     std::unordered_map<int, std::unordered_map<int, int>> USER_MOVIE_RATING;
     std::tie(USER_MOVIE_RATING, ERROR_CODE) = load_user_ratings_train_data(REPO_PATH);
-
     if(ERROR_CODE){
-        std::cerr<<"USER RATINGS TRAINING DATASET NOT FOUND";
+        std::cerr<<ERROR_CODE;
         return ERROR_CODE;
     }
 
     auto user_user_distance = get_user_distances(USER_MOVIE_RATING);
 
     auto user_closestUser_user = get_user_closest_users(user_user_distance);
-
-        
-    std::ofstream output_stream(REPO_PATH + "csv/user_closestUser_user.csv");
-    if (!output_stream.is_open()){
-        std::cerr<<"FAILED TO OPEN OUTPUT FILE";
-        return 3;
+    
+    ERROR_CODE = predict_rating(REPO_PATH, user_closestUser_user, USER_MOVIE_RATING);
+    if(ERROR_CODE) {
+        std::cerr<<ERROR_CODE;
+        return ERROR_CODE;
     }
 
-    for(auto &element: user_closestUser_user){
-        output_stream<<element.first<<";";
-        for(auto &mid: element.second){
-            output_stream<<mid<<";";
-        }
-        output_stream<<std::endl;
-    }
-
-    output_stream.close();
-
-    return ERROR_CODE;
+    return error_code::OK;
 }
