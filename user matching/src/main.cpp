@@ -115,7 +115,8 @@ std::unordered_map<int, std::unordered_map<int, float>> get_user_distances(const
             }
 
             if(hit_count != 0) user_user_distance[primaryUser.first][secondaryUser.first] = 
-                float(sum_rating_difference) * (1.0 - float(hit_count) / float(primaryUser.second.size() + secondaryUser.second.size() - hit_count));
+                static_cast<float>(sum_rating_difference) * (1.0 - static_cast<float>(hit_count) / 
+                static_cast<float>(primaryUser.second.size() + secondaryUser.second.size() - hit_count));
 
             else user_user_distance[primaryUser.first][secondaryUser.first] = -1.0;
         }
@@ -155,7 +156,60 @@ std::unordered_map<int, std::vector<int>> get_user_closest_users(const std::unor
     return user_closetUser_user;
 }
 
-error_code predict_rating(const std::string &REPO_PATH,
+int predict_rating(const int &user_id, const int &movie_id, const int &match_count,
+const std::unordered_map<int, std::vector<int>> &user_closestUser_user, 
+const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
+    
+        int closest_match = -1;
+        std::vector<int> match_ratings;
+        match_ratings.reserve(match_count);
+
+        while((match_ratings.size() < match_count) and (closest_match < static_cast<int>(user_closestUser_user.at(user_id).size()))){
+            
+            closest_match++;
+            auto iskey = user_movie_rating.at( user_closestUser_user.at(user_id)[closest_match] ).find(movie_id);
+
+            while(iskey == user_movie_rating.at( user_closestUser_user.at(user_id)[closest_match] ).end()){
+                
+                closest_match++;
+                iskey = user_movie_rating.at( user_closestUser_user.at(user_id)[closest_match] ).find(movie_id);
+
+            }
+
+            match_ratings.push_back(user_movie_rating.at( user_closestUser_user.at(user_id)[closest_match] ).at(movie_id));
+
+        }
+
+        int possible_ratings[6] = {0, 0, 0, 0, 0, 0};
+
+        for(auto &match: match_ratings){
+            possible_ratings[match]+=2;
+        }
+
+        int max_rating = 0;
+        for(int rating = 0; rating < 6; rating++){
+            if(possible_ratings[max_rating] < possible_ratings[rating]){
+                max_rating = rating;
+            }
+        }
+        for(int rating = 0; rating < 6; rating++){
+            if (possible_ratings[max_rating] == possible_ratings[rating]){
+                for(auto &match_rating: match_ratings){
+                    if(match_rating == max_rating){
+                        break;
+                    }
+                    else if(match_rating == rating){
+                        max_rating = rating;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return max_rating;
+}
+
+error_code generate_task(const std::string &REPO_PATH,
 const std::unordered_map<int, std::vector<int>> &user_closestUser_user, const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
 
     error_code ERROR_CODE = error_code::OK;
@@ -174,21 +228,13 @@ const std::unordered_map<int, std::vector<int>> &user_closestUser_user, const st
     }
 
     for(auto &entry: USER_MOVIE_TASK){
+
         for(auto &element: entry){
             output_stream<<element<<";";
         }
 
-        int closest_match = 0;
-        auto iskey = user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).find(entry[2]);
+        output_stream<<predict_rating(entry[1], entry[2], 3, user_closestUser_user, user_movie_rating)<<std::endl;
 
-        while(iskey == user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).end()){
-            
-            closest_match++;
-            iskey = user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).find(entry[2]);
-
-        }
-
-        output_stream<<user_movie_rating.at( user_closestUser_user.at(entry[1])[closest_match] ).at(entry[2])<<std::endl;
     }
 
     return error_code::OK;
@@ -217,7 +263,7 @@ int main(int argc, char** argv){
 
     auto user_closestUser_user = get_user_closest_users(user_user_distance);
     
-    ERROR_CODE = predict_rating(REPO_PATH, user_closestUser_user, USER_MOVIE_RATING);
+    ERROR_CODE = generate_task(REPO_PATH, user_closestUser_user, USER_MOVIE_RATING);
     if(ERROR_CODE) {
         std::cerr<<ERROR_CODE;
         return ERROR_CODE;
