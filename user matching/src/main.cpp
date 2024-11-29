@@ -4,7 +4,12 @@
 #include <filesystem>
 #include <vector>
 #include <unordered_map>
+#include <random>
 #include <future>
+
+#define MAX_MATCH_COUNT 5
+#define VALIDATION_SPLIT 10
+#define CROSS_VALIDATION_COUNT 10
 
 enum error_code{
     OK = 0,
@@ -156,9 +161,12 @@ std::unordered_map<int, std::vector<int>> get_user_closest_users(const std::unor
     return user_closetUser_user;
 }
 
+// for a user_id and movie_id returns the mode of "match_count" closest users' ratings
+// and in case of ties preferring the closest's user rating of tied values
 int predict_rating(const int &user_id, const int &movie_id, const int &match_count,
-const std::unordered_map<int, std::vector<int>> &user_closestUser_user, 
-const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
+    const std::unordered_map<int, std::vector<int>> &user_closestUser_user, 
+    const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating
+){
     
         int closest_match = -1;
         std::vector<int> match_ratings;
@@ -183,7 +191,7 @@ const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
         int possible_ratings[6] = {0, 0, 0, 0, 0, 0};
 
         for(auto &match: match_ratings){
-            possible_ratings[match]+=2;
+            possible_ratings[match]++;
         }
 
         int max_rating = 0;
@@ -209,8 +217,131 @@ const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
         return max_rating;
 }
 
-error_code generate_task(const std::string &REPO_PATH,
-const std::unordered_map<int, std::vector<int>> &user_closestUser_user, const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating){
+// since the predict function returns mode training prefers higher match counts
+// L"userId".("bestMatchCount")
+std::unordered_map<int, int> train(
+    const std::vector<int> &userIds,
+    const std::unordered_map<int, std::vector<int>> &user_closestUser_user,
+    const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating
+){
+    std::unordered_map<int, int> training_output;
+
+    for(auto &userId: userIds){
+
+        // generate validation splits
+        std::vector<std::vector<int>> movie_validationSplit{CROSS_VALIDATION_COUNT, std::vector<int>()};
+        movie_validationSplit[0].reserve(user_movie_rating.at(userId).size());
+        for(auto &movie: user_movie_rating.at(userId)){
+            movie_validationSplit[0].push_back(movie.first);
+        }
+        for(int splitId = 1; splitId < CROSS_VALIDATION_COUNT; splitId++){
+            movie_validationSplit[splitId] = movie_validationSplit[0];
+        }
+
+        for(auto &split: movie_validationSplit){
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(split.begin(), split.end(), g);
+        }
+
+        std::vector<std::pair<int,int>> crossValidResults;
+
+        for(auto &split: movie_validationSplit){
+
+            int bestMatchCount = 0;        
+            int bestAccuracy = 0;
+            int accuracy;
+            
+            for(int matchCount = 1; matchCount < MAX_MATCH_COUNT; matchCount++){
+
+                accuracy = 0;
+
+                for(int validMovieId = 0; validMovieId < VALIDATION_SPLIT; validMovieId++){
+                    if(predict_rating(userId, split[validMovieId], matchCount, user_closestUser_user, user_movie_rating) == 
+                        user_movie_rating.at(userId).at(split[validMovieId])) accuracy++;
+                }
+
+                if(accuracy >= bestAccuracy) {
+                    bestMatchCount = matchCount;
+                    bestAccuracy = accuracy;
+                }
+            }
+
+            crossValidResults.push_back(std::pair(bestMatchCount, bestAccuracy));
+        }
+
+        int bestResultId = 0;        
+        int bestAccuracy = 0;
+
+        for(int resultId = 0; resultId < CROSS_VALIDATION_COUNT; resultId++){
+
+            int accuracy = 0;
+
+            for(int splitId = 0; splitId < CROSS_VALIDATION_COUNT; splitId++){
+                
+                if(resultId != splitId){
+                for(int validMovieId = 0; validMovieId < VALIDATION_SPLIT; validMovieId++){
+                    if(predict_rating(userId, movie_validationSplit[splitId][validMovieId], crossValidResults[resultId].first, user_closestUser_user, user_movie_rating) 
+                        == user_movie_rating.at(userId).at(movie_validationSplit[splitId][validMovieId])) accuracy++;
+                }
+                }
+            }
+
+            if(accuracy >= bestAccuracy) {
+                bestResultId = resultId;
+                bestAccuracy = accuracy;
+            }
+        }
+
+        training_output[userId] = crossValidResults[bestResultId].first;
+    }
+
+    return training_output;
+}
+
+std::unordered_map<int, int> parallel_train(
+    const std::unordered_map<int, std::vector<int>> &user_closestUser_user,
+    const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating
+){
+    const size_t THREAD_COUNT = [](){
+        auto temp = std::thread::hardware_concurrency();
+        if(temp > 0) return temp;
+        return 1u;
+    }();
+
+    
+    std::vector<std::vector<int>> thred_userId{THREAD_COUNT, std::vector<int>()};
+    int thread_id = 0;
+
+    for(auto &uid: user_movie_rating){
+        thred_userId[thread_id].push_back(uid.first);
+        thread_id++;
+        if(thread_id >= THREAD_COUNT) thread_id = 0;
+    }
+
+    std::vector<std::future<std::unordered_map<int, int>>> threads;
+
+    for(int thread_id = 0; thread_id < THREAD_COUNT; thread_id ++){
+        threads.emplace_back(std::async(std::launch::async, train, std::cref(thred_userId[thread_id]), std::cref(user_closestUser_user), std::cref(user_movie_rating)));
+    }
+
+    std::unordered_map<int, int> training_output;
+
+    for(auto &future: threads){
+        for(auto &threadResults: future.get()){
+            training_output[threadResults.first] = threadResults.second;
+        }
+    }
+
+    return training_output;
+
+}
+
+error_code generate_task(
+    const std::string &REPO_PATH, const std::unordered_map<int, int> &user_matchCount,
+    const std::unordered_map<int, std::vector<int>> &user_closestUser_user, 
+    const std::unordered_map<int, std::unordered_map<int, int>> &user_movie_rating
+){
 
     error_code ERROR_CODE = error_code::OK;
     std::vector<std::vector<int>> USER_MOVIE_TASK;
@@ -233,7 +364,7 @@ const std::unordered_map<int, std::vector<int>> &user_closestUser_user, const st
             output_stream<<element<<";";
         }
 
-        output_stream<<predict_rating(entry[1], entry[2], 3, user_closestUser_user, user_movie_rating)<<std::endl;
+        output_stream<<predict_rating(entry[1], entry[2], user_matchCount.at(entry[1]), user_closestUser_user, user_movie_rating)<<std::endl;
 
     }
 
@@ -259,11 +390,9 @@ int main(int argc, char** argv){
         return ERROR_CODE;
     }
 
-    auto user_user_distance = get_user_distances(USER_MOVIE_RATING);
-
-    auto user_closestUser_user = get_user_closest_users(user_user_distance);
+    auto user_closestUser_user = get_user_closest_users(get_user_distances(USER_MOVIE_RATING));
     
-    ERROR_CODE = generate_task(REPO_PATH, user_closestUser_user, USER_MOVIE_RATING);
+    ERROR_CODE = generate_task(REPO_PATH, parallel_train(user_closestUser_user, USER_MOVIE_RATING), user_closestUser_user, USER_MOVIE_RATING);
     if(ERROR_CODE) {
         std::cerr<<ERROR_CODE;
         return ERROR_CODE;
