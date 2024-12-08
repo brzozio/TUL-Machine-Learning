@@ -14,8 +14,8 @@
 #define NUM_OF_MOVIES 200
 #define NUM_OF_USERS 358
 #define NUM_OF_FEATURES 10
-#define TRAINING_LOOPS 200
-#define LEARNING_RATE 0.0001
+#define TRAINING_LOOPS 2000
+#define LEARNING_RATE 0.001
 
 
 enum error_code{
@@ -185,8 +185,8 @@ void tuneParamsForUser( int const& user_begin, int const& user_end,
             
             if(localUserId_localMovieId_indicator[uid][mid == 1.0]){
 
-                derivative = predict(uid,mid,user_paramId_param,movie_featId_feature);
-                derivative -= localUserId_localMovieId_rating[uid][mid];
+                derivative = localUserId_localMovieId_rating[uid][mid];
+                derivative -= predict(uid,mid,user_paramId_param,movie_featId_feature);
 
                 for(int pid = 0; pid < NUM_OF_FEATURES; pid++){
                     derivs[pid] += derivative * movie_featId_feature[mid][pid];
@@ -218,8 +218,8 @@ void tuneFeatsForMovie( int const& movie_begin, int const& movie_end,
             
             if(localUserId_localMovieId_indicator[uid][mid]){
 
-                derivative = predict(uid,mid,user_paramId_param,movie_featId_feature);
-                derivative -= localUserId_localMovieId_rating[uid][mid];
+                derivative = localUserId_localMovieId_rating[uid][mid];
+                derivative -= predict(uid,mid,user_paramId_param,movie_featId_feature);
 
                 for(int fid = 0; fid < NUM_OF_FEATURES; fid++){
                     derivs[fid] += derivative * user_paramId_param[uid][fid];
