@@ -14,7 +14,8 @@
 #define NUM_OF_MOVIES 200
 #define NUM_OF_USERS 358
 #define NUM_OF_FEATURES 10
-#define TRAINING_LOOPS 2'000
+#define TRAINING_LOOPS 200
+#define LEARNING_RATE 0.0001
 
 
 enum error_code{
@@ -153,27 +154,87 @@ void fillRandom0to1(std::array<std::array<float, x1>, x2>& output){
     }
 }
 
+float predict(const int& user, const int& movie,
+    const std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
+    const std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature
+){
+    float sum = 0.0;
+    for(int i = 0; i < NUM_OF_FEATURES; i++){
+        sum+=user_paramId_param[user][i]*movie_featId_feature[movie][i];
+    }
+    sum+=user_paramId_param[user][NUM_OF_FEATURES];
+    if(sum > 5.0) return 5.0;
+    if(sum < 0.0) return 0.0;
+    return sum;
+}
 
-void tuneParamsForUser(
-    std::array<float,NUM_OF_FEATURES+1>& paramId_param,
+void tuneParamsForUser( int const& user_begin, int const& user_end,
+    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
     const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_indicator,
     const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating,
     const std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature
 ){
-    
+
+    float derivative = 0;
+
+    for(int uid = user_begin; uid < user_end; uid++){
+
+        std::array<float, NUM_OF_FEATURES+1> derivs{0};
+
+        for(int mid = 0; mid < NUM_OF_MOVIES; mid++){
+            
+            if(localUserId_localMovieId_indicator[uid][mid]){
+
+                derivative = predict(uid,mid,user_paramId_param,movie_featId_feature);
+                derivative -= localUserId_localMovieId_rating[uid][mid];
+
+                for(int pid = 0; pid < NUM_OF_FEATURES; pid++){
+                    derivs[pid] += derivative * movie_featId_feature[mid][pid];
+                }
+                derivs[NUM_OF_FEATURES] += derivative;
+            }
+        }
+
+        for(int pid = 0; pid < NUM_OF_FEATURES+1; pid++){
+            user_paramId_param[uid][pid] += LEARNING_RATE*derivs[pid];
+        }
+    }
 }
 
-void tuneFeatsForMovie(
-    std::array<float,NUM_OF_FEATURES>& featId_feature,
+void tuneFeatsForMovie( int const& movie_begin, int const& movie_end,
+    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature,
     const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_indicator,
     const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating,
     const std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param
 ){
 
+    float derivative = 0;
+
+    for(int mid = movie_begin; mid < movie_end; mid++){
+
+        std::array<float, NUM_OF_FEATURES> derivs{0};
+
+        for(int uid = 0; uid < NUM_OF_USERS; uid++){
+            
+            if(localUserId_localMovieId_indicator[uid][mid]){
+
+                derivative = predict(uid,mid,user_paramId_param,movie_featId_feature);
+                derivative -= localUserId_localMovieId_rating[uid][mid];
+
+                for(int fid = 0; fid < NUM_OF_FEATURES; fid++){
+                    derivs[fid] += derivative * user_paramId_param[uid][fid];
+                }
+            }
+        }
+
+        for(int fid = 0; fid < NUM_OF_FEATURES; fid++){
+            movie_featId_feature[mid][fid] += LEARNING_RATE*derivs[fid];
+        }
+    }
 }
 
 
-const auto NUM_OF_THREADS = std::thread::hardware_concurrency();
+const unsigned int NUM_OF_THREADS = std::thread::hardware_concurrency();
 
 std::condition_variable cv_scheduler;
 std::condition_variable cv_workers;
@@ -199,22 +260,16 @@ void worker(
         }
         if(!*escape) return;
 
-        if(*task){
-            for(int uid = user_begin; uid < user_end; uid++){
-                tuneParamsForUser(user_paramId_param[uid], localUserId_localMovieId_indicator, localUserId_localMovieId_rating, movie_featId_feature);
-            }
-        }
+        if(*task) tuneParamsForUser(user_begin, user_end, user_paramId_param, 
+        localUserId_localMovieId_indicator, localUserId_localMovieId_rating, movie_featId_feature); 
+        
 
-        else {
-            for(int mid = movie_begin; mid < movie_end; mid++){
-                tuneFeatsForMovie(movie_featId_feature[mid], localUserId_localMovieId_indicator, localUserId_localMovieId_rating, user_paramId_param);
-            }
-        }
+        else tuneFeatsForMovie(movie_begin, movie_end, movie_featId_feature, 
+        localUserId_localMovieId_indicator, localUserId_localMovieId_rating, user_paramId_param);
 
         {
             std::lock_guard<std::mutex> lk(mx);
             workersDone++;
-            std::cerr<<workersDone<<" done\t";
         }
         cv_scheduler.notify_all();
     }
