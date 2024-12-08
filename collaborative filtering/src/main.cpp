@@ -183,7 +183,7 @@ void tuneParamsForUser( int const& user_begin, int const& user_end,
 
         for(int mid = 0; mid < NUM_OF_MOVIES; mid++){
             
-            if(localUserId_localMovieId_indicator[uid][mid]){
+            if(localUserId_localMovieId_indicator[uid][mid == 1.0]){
 
                 derivative = predict(uid,mid,user_paramId_param,movie_featId_feature);
                 derivative -= localUserId_localMovieId_rating[uid][mid];
