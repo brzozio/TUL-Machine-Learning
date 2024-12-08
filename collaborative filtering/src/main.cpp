@@ -8,13 +8,13 @@
 #include <unordered_map>
 
 #include <random>
-#include <algorithm>
 
 #include <future>
 
 #define NUM_OF_MOVIES 200
 #define NUM_OF_USERS 358
 #define NUM_OF_FEATURES 10
+#define TRAINING_LOOPS 2'000
 
 
 enum error_code{
@@ -160,7 +160,7 @@ void tuneParamsForUser(
     const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating,
     const std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature
 ){
-
+    
 }
 
 void tuneFeatsForMovie(
@@ -172,6 +172,122 @@ void tuneFeatsForMovie(
 
 }
 
+
+const auto NUM_OF_THREADS = std::thread::hardware_concurrency();
+
+std::condition_variable cv_scheduler;
+std::condition_variable cv_workers;
+std::mutex mx;
+
+unsigned int workersDone = 0;
+std::vector<char> workPermit(NUM_OF_THREADS, 1);
+
+
+void worker(
+    bool *const escape, bool *const task, char *const permit, 
+    const int& user_begin, const int& user_end, const int& movie_begin, const int& movie_end,
+    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
+    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature,
+    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_indicator,
+    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating
+){
+    while(true){
+        {
+            std::unique_lock<std::mutex> lk(mx);
+            cv_workers.wait(lk, [permit]{ return *permit; });
+            *permit = 0;
+        }
+        if(!*escape) return;
+
+        if(*task){
+            for(int uid = user_begin; uid < user_end; uid++){
+                tuneParamsForUser(user_paramId_param[uid], localUserId_localMovieId_indicator, localUserId_localMovieId_rating, movie_featId_feature);
+            }
+        }
+
+        else {
+            for(int mid = movie_begin; mid < movie_end; mid++){
+                tuneFeatsForMovie(movie_featId_feature[mid], localUserId_localMovieId_indicator, localUserId_localMovieId_rating, user_paramId_param);
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(mx);
+            workersDone++;
+            std::cerr<<workersDone<<" done\t";
+        }
+        cv_scheduler.notify_all();
+    }
+}
+ 
+void scheduler(bool *const escape, bool *const task)
+{
+    int loopid = 0;
+    while(*escape){
+        {
+            std::unique_lock<std::mutex> lk(mx);
+            cv_scheduler.wait(lk, []{ return workersDone == NUM_OF_THREADS;}); 
+            for(auto& permit: workPermit){
+                permit = 1;
+            }
+            workersDone = 0;
+            *task = (*task) ? false : true;
+            loopid++;
+            if(loopid >= TRAINING_LOOPS) *escape = false;
+        }
+        cv_workers.notify_all();
+    }
+    return;
+}
+
+void train(
+    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature,
+    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
+    const std::unordered_map<int, std::unordered_map<int, int>>& USER_MOVIE_RATING
+){
+
+    const auto localUserId_localMovieId_indicator = getRatingPresenceIndicator(USER_MOVIE_RATING);
+    const auto localUserId_localMovieId_rating = transformRatings(USER_MOVIE_RATING);
+
+    bool training_mode = true;
+    bool continue_training = true;
+
+    int userIdResidue = NUM_OF_USERS % NUM_OF_THREADS;
+    std::vector<int> uid_split(NUM_OF_THREADS+1, 0);
+
+    for(int i = 1; i < NUM_OF_THREADS; i++){
+        uid_split[i] = uid_split[i-1] + NUM_OF_USERS / NUM_OF_THREADS;
+        if(i < userIdResidue) uid_split[i]++;
+    }
+    uid_split[NUM_OF_THREADS] = NUM_OF_USERS;
+
+    int movieIdResidue = NUM_OF_MOVIES % NUM_OF_THREADS;
+    std::vector<int> mid_split(NUM_OF_THREADS+1, 0);
+
+    for(int i = 1; i < NUM_OF_THREADS; i++){
+        mid_split[i] = mid_split[i-1] + NUM_OF_MOVIES / NUM_OF_THREADS;
+        if(i < movieIdResidue) mid_split[i]++;
+    }
+
+    mid_split[NUM_OF_THREADS] = NUM_OF_MOVIES;
+
+
+    std::vector<std::future<void>> workers;
+    for(int tid = 0; tid < NUM_OF_THREADS; tid++){
+        workers.emplace_back(std::async(std::launch::async, worker, &continue_training, &training_mode, &workPermit[tid],
+        uid_split[tid], uid_split[tid+1], mid_split[tid], mid_split[tid+1], 
+        std::ref(user_paramId_param), std::ref(movie_featId_feature), 
+        std::cref(localUserId_localMovieId_indicator), std::cref(localUserId_localMovieId_rating)));
+    }
+
+    scheduler(&continue_training, &training_mode);
+
+    for(auto& thread: workers){
+        thread.get();
+    }
+    
+    return;
+}
 
 int predict_rating(const int &user_id, const int &movie_id
 ){
@@ -229,18 +345,13 @@ int main(int argc, char** argv){
         return ERROR_CODE;
     }
 
-    const auto localUserId_localMovieId_indicator = getRatingPresenceIndicator(USER_MOVIE_RATING);
-
-    const auto localUserId_localMovieId_rating = transformRatings(USER_MOVIE_RATING);
-
     std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS> user_paramId_param;
     fillRandom0to1(user_paramId_param);
 
     std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES> movie_featId_feature;
     fillRandom0to1(movie_featId_feature);
 
-
-
+    train(movie_featId_feature, user_paramId_param, USER_MOVIE_RATING);
     
     ERROR_CODE = generateTask(REPO_PATH);
     if(ERROR_CODE) {
