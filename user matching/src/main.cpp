@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <random>
 #include <future>
+#include <algorithm>
 
 #define MAX_MATCH_COUNT 5
 #define VALIDATION_SPLIT 10
@@ -18,7 +19,7 @@ enum error_code{
     couldNotWriteDataFile = 3
 };
 
-std::pair<std::string, error_code> get_repository_path(){    
+std::pair<std::string, error_code> getRepositoryPath(){    
 
     std::string repo_path = std::filesystem::current_path().generic_string();
     std::size_t found_at = repo_path.find("/src");
@@ -28,7 +29,7 @@ std::pair<std::string, error_code> get_repository_path(){
     return std::pair("",error_code::unexpectedRepositoryStructure);
 }
 
-std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> load_user_ratings_train_data(const std::string &REPO_PATH){ 
+std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> loadUserRatingsTrainData(const std::string &REPO_PATH){ 
 
     std::unordered_map<int, std::unordered_map<int, int>> user_movie_rating;
 
@@ -66,7 +67,7 @@ std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> loa
     return std::pair(user_movie_rating, error_code::OK);
 }
 
-std::pair<std::vector<std::vector<int>>, error_code> load_task(const std::string &REPO_PATH){
+std::pair<std::vector<std::vector<int>>, error_code> loadTask(const std::string &REPO_PATH){
 
     std::vector<std::vector<int>> task_data;
 
@@ -346,7 +347,7 @@ error_code generate_task(
     error_code ERROR_CODE = error_code::OK;
     std::vector<std::vector<int>> USER_MOVIE_TASK;
 
-    std::tie(USER_MOVIE_TASK, ERROR_CODE) = load_task(REPO_PATH);
+    std::tie(USER_MOVIE_TASK, ERROR_CODE) = loadTask(REPO_PATH);
     if(ERROR_CODE){
         std::cerr<<"USER RATINGS TASK DATASET NOT FOUND";
         return ERROR_CODE;
@@ -376,7 +377,7 @@ int main(int argc, char** argv){
     error_code ERROR_CODE = error_code::OK;
 
     std::string REPO_PATH = "";
-    std::tie(REPO_PATH, ERROR_CODE) = get_repository_path();
+    std::tie(REPO_PATH, ERROR_CODE) = getRepositoryPath();
     if(ERROR_CODE) {
         std::cerr<<ERROR_CODE;
         return ERROR_CODE;
@@ -384,7 +385,7 @@ int main(int argc, char** argv){
 
     // hashmap storage for unified internal and external ID system
     std::unordered_map<int, std::unordered_map<int, int>> USER_MOVIE_RATING;
-    std::tie(USER_MOVIE_RATING, ERROR_CODE) = load_user_ratings_train_data(REPO_PATH);
+    std::tie(USER_MOVIE_RATING, ERROR_CODE) = loadUserRatingsTrainData(REPO_PATH);
     if(ERROR_CODE){
         std::cerr<<ERROR_CODE;
         return ERROR_CODE;
