@@ -12,7 +12,6 @@
 #include <future>
 
 #define NUM_OF_MOVIES 200
-#define NUM_OF_USERS 358
 #define NUM_OF_FEATURES 10
 #define TRAINING_LOOPS 2000
 #define LEARNING_RATE 0.001
@@ -35,9 +34,9 @@ std::pair<std::string, error_code> getRepositoryPath(){
     return std::pair("",error_code::unexpectedRepositoryStructure);
 }
 
-std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> loadUserRatingsTrainData(const std::string &REPO_PATH){ 
+std::pair<std::unordered_map<int, std::unordered_map<int, float>>, error_code> loadUserRatingsTrainData(const std::string &REPO_PATH){ 
 
-    std::unordered_map<int, std::unordered_map<int, int>> user_movie_rating;
+    std::unordered_map<int, std::unordered_map<int, float>> user_movie_rating;
 
     std::ifstream file_user_ratings_train(REPO_PATH + "csv/train.csv");
     if (!file_user_ratings_train.is_open()) return std::pair(user_movie_rating, error_code::couldNotReadDataFile);
@@ -63,7 +62,7 @@ std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> loa
         loaded_movie_id = std::stoi(loaded_string);
 
         std::getline(string_stream, loaded_string, ';');
-        loaded_rating = std::stoi(loaded_string);
+        loaded_rating = std::stof(loaded_string);
 
         // std::unoredered_set::operator[]() adds default value if key does not exist so no checks needed
         user_movie_rating[loaded_user_id][loaded_movie_id] = loaded_rating;
@@ -102,51 +101,12 @@ std::pair<std::vector<std::vector<int>>, error_code> loadTask(const std::string 
     return std::pair(task_data, error_code::OK);
 }
 
-std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS> transformRatings(const std::unordered_map<int, std::unordered_map<int, int>>& user_movie_rating){
-    std::array< std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS> output;
-
-    for(auto& y: output){
-        for(auto& x:y){
-            x = -1;
-        }
-    }
-
-    int uid=0;
-    for(auto& [user, movie_rating]: user_movie_rating){
-        for(auto& [movie, rating]: movie_rating){
-            output[uid][movie-1] = static_cast<float>(rating);
-        }
-        uid++;
-    }
-    return output;
-}
-
-std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS> getRatingPresenceIndicator(const std::unordered_map<int, std::unordered_map<int, int>>& user_movie_rating){
-    std::array< std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS> output;
-
-    for(auto& y: output){
-        for(auto& x:y){
-            x = 0;
-        }
-    }
-
-    int uid=0;
-    for(auto& [user, movie_rating]: user_movie_rating){
-        for(auto& [movie, rating]: movie_rating){
-            output[uid][movie-1] = 1;
-        }
-        uid++;
-    }
-    return output;
-}
-
-template<size_t x1, size_t x2>
-void fillRandom0to1(std::array<std::array<float, x1>, x2>& output){
+void fillRandom0to1(std::unordered_map<int, std::vector<float>>& output){
 
     std::uniform_real_distribution<> dis(0.0, 1.0);
 
-    for(auto& y: output){
-        for(auto& x: y){
+    for(auto& [key, array]: output){
+        for(auto& x: array){
             std::random_device rd;
             std::mt19937 gen(rd());
             x = dis(gen);
@@ -154,81 +114,79 @@ void fillRandom0to1(std::array<std::array<float, x1>, x2>& output){
     }
 }
 
-float predict(const int& user, const int& movie,
-    const std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
-    const std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature
+float predict(
+    const std::vector<float>& paramId_param,
+    const std::vector<float>& featId_feature
 ){
     float sum = 0.0;
     for(int i = 0; i < NUM_OF_FEATURES; i++){
-        sum+=user_paramId_param[user][i]*movie_featId_feature[movie][i];
+        sum+=paramId_param[i]*featId_feature[i];
     }
-    sum+=user_paramId_param[user][NUM_OF_FEATURES];
+    sum+=paramId_param[NUM_OF_FEATURES];
     if(sum > 5.0) return 5.0;
     if(sum < 0.0) return 0.0;
     return sum;
 }
 
-void tuneParamsForUser( int const& user_begin, int const& user_end,
-    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
-    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_indicator,
-    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating,
-    const std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature
+void tuneParamsForUser(const std::vector<int>& users,
+    std::unordered_map<int, std::vector<float>>& user_paramId_param,
+    const std::unordered_map<int, std::unordered_map<int, float>>& user_movie_rating,
+    const std::unordered_map<int, std::vector<float>>& movie_featId_feature
 ){
 
     float derivative = 0;
 
-    for(int uid = user_begin; uid < user_end; uid++){
+    for(auto& user: users){
 
         std::array<float, NUM_OF_FEATURES+1> derivs{0};
 
-        for(int mid = 0; mid < NUM_OF_MOVIES; mid++){
+        for(auto& [movie, rating]: user_movie_rating.at(user)){
             
-            if(localUserId_localMovieId_indicator[uid][mid == 1.0]){
+            if(rating != -1){
 
-                derivative = localUserId_localMovieId_rating[uid][mid];
-                derivative -= predict(uid,mid,user_paramId_param,movie_featId_feature);
+                derivative = rating;
+                derivative -= predict(user_paramId_param.at(user), movie_featId_feature.at(movie));
 
                 for(int pid = 0; pid < NUM_OF_FEATURES; pid++){
-                    derivs[pid] += derivative * movie_featId_feature[mid][pid];
+                    derivs[pid] += derivative * movie_featId_feature.at(movie)[pid];
                 }
                 derivs[NUM_OF_FEATURES] += derivative;
             }
         }
 
         for(int pid = 0; pid < NUM_OF_FEATURES+1; pid++){
-            user_paramId_param[uid][pid] += LEARNING_RATE*derivs[pid];
+            user_paramId_param.at(user)[pid] += LEARNING_RATE*derivs[pid];
         }
     }
 }
 
-void tuneFeatsForMovie( int const& movie_begin, int const& movie_end,
-    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature,
-    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_indicator,
-    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating,
-    const std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param
+void tuneFeatsForMovie(const std::vector<int>& movies,
+    std::unordered_map<int, std::vector<float>>& movie_featId_feature,
+    const std::unordered_map<int, std::unordered_map<int, float>>& user_movie_rating,
+    const std::unordered_map<int, std::vector<float>>& user_paramId_param
 ){
 
     float derivative = 0;
 
-    for(int mid = movie_begin; mid < movie_end; mid++){
+    for(auto& movie: movies){
 
         std::array<float, NUM_OF_FEATURES> derivs{0};
 
-        for(int uid = 0; uid < NUM_OF_USERS; uid++){
+        for(auto& [user, movie_rating]: user_movie_rating){
             
-            if(localUserId_localMovieId_indicator[uid][mid]){
+            if(movie_rating.find(movie) != movie_rating.end()){
 
-                derivative = localUserId_localMovieId_rating[uid][mid];
-                derivative -= predict(uid,mid,user_paramId_param,movie_featId_feature);
+                derivative = movie_rating.at(movie);
+                derivative -= predict(user_paramId_param.at(user), movie_featId_feature.at(movie));
 
                 for(int fid = 0; fid < NUM_OF_FEATURES; fid++){
-                    derivs[fid] += derivative * user_paramId_param[uid][fid];
+                    derivs[fid] += derivative * user_paramId_param.at(user)[fid];
                 }
             }
         }
 
         for(int fid = 0; fid < NUM_OF_FEATURES; fid++){
-            movie_featId_feature[mid][fid] += LEARNING_RATE*derivs[fid];
+            movie_featId_feature.at(movie)[fid] += LEARNING_RATE*derivs[fid];
         }
     }
 }
@@ -246,26 +204,24 @@ std::vector<char> workPermit(NUM_OF_THREADS, 1);
 
 void worker(
     bool *const escape, bool *const task, char *const permit, 
-    const int& user_begin, const int& user_end, const int& movie_begin, const int& movie_end,
-    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
-    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature,
-    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_indicator,
-    const std::array<std::array<float, NUM_OF_MOVIES>, NUM_OF_USERS>& localUserId_localMovieId_rating
+    const std::vector<int>& users, const std::vector<int>& movies,
+    std::unordered_map<int, std::vector<float>>& user_paramId_param,
+    std::unordered_map<int, std::vector<float>>& movie_featId_feature,
+    const std::unordered_map<int, std::unordered_map<int, float>>& user_movie_rating
 ){
     while(true){
+
         {
             std::unique_lock<std::mutex> lk(mx);
             cv_workers.wait(lk, [permit]{ return *permit; });
             *permit = 0;
         }
+
         if(!*escape) return;
 
-        if(*task) tuneParamsForUser(user_begin, user_end, user_paramId_param, 
-        localUserId_localMovieId_indicator, localUserId_localMovieId_rating, movie_featId_feature); 
-        
+        if(*task) tuneParamsForUser(users, user_paramId_param, user_movie_rating, movie_featId_feature);        
 
-        else tuneFeatsForMovie(movie_begin, movie_end, movie_featId_feature, 
-        localUserId_localMovieId_indicator, localUserId_localMovieId_rating, user_paramId_param);
+        else tuneFeatsForMovie(movies, movie_featId_feature, user_movie_rating, user_paramId_param);
 
         {
             std::lock_guard<std::mutex> lk(mx);
@@ -296,62 +252,52 @@ void scheduler(bool *const escape, bool *const task)
 }
 
 void train(
-    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES>& movie_featId_feature,
-    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS>& user_paramId_param,
-    const std::unordered_map<int, std::unordered_map<int, int>>& USER_MOVIE_RATING
+    std::unordered_map<int, std::vector<float>>& user_paramId_param,
+    std::unordered_map<int, std::vector<float>>& movie_featId_feature,
+    const std::unordered_map<int, std::unordered_map<int, float>>& user_movie_rating
 ){
-
-    const auto localUserId_localMovieId_indicator = getRatingPresenceIndicator(USER_MOVIE_RATING);
-    const auto localUserId_localMovieId_rating = transformRatings(USER_MOVIE_RATING);
 
     bool training_mode = true;
     bool continue_training = true;
 
-    int userIdResidue = NUM_OF_USERS % NUM_OF_THREADS;
-    std::vector<int> uid_split(NUM_OF_THREADS+1, 0);
-
-    for(int i = 1; i < NUM_OF_THREADS; i++){
-        uid_split[i] = uid_split[i-1] + NUM_OF_USERS / NUM_OF_THREADS;
-        if(i < userIdResidue) uid_split[i]++;
-    }
-    uid_split[NUM_OF_THREADS] = NUM_OF_USERS;
-
-    int movieIdResidue = NUM_OF_MOVIES % NUM_OF_THREADS;
-    std::vector<int> mid_split(NUM_OF_THREADS+1, 0);
-
-    for(int i = 1; i < NUM_OF_THREADS; i++){
-        mid_split[i] = mid_split[i-1] + NUM_OF_MOVIES / NUM_OF_THREADS;
-        if(i < movieIdResidue) mid_split[i]++;
+    std::vector<std::vector<int>> uid_split(NUM_OF_THREADS, std::vector<int>());
+    int offset = 0;
+    for(auto& [user, movie_rating]: user_movie_rating){
+        uid_split[offset].push_back(user);
+        offset++;
+        if(offset >= NUM_OF_THREADS) offset = 0;
     }
 
-    mid_split[NUM_OF_THREADS] = NUM_OF_MOVIES;
+    offset = 0;
+    std::vector<std::vector<int>> mid_split(NUM_OF_THREADS, std::vector<int>());
+    for(int movie = 1; movie <= 200; movie++){
+        mid_split[offset].push_back(movie);
+        offset++;
+        if(offset >= NUM_OF_THREADS) offset = 0;
+    }
 
+    std::vector<std::thread> workers;
 
-    std::vector<std::future<void>> workers;
     for(int tid = 0; tid < NUM_OF_THREADS; tid++){
-        workers.emplace_back(std::async(std::launch::async, worker, &continue_training, &training_mode, &workPermit[tid],
-        uid_split[tid], uid_split[tid+1], mid_split[tid], mid_split[tid+1], 
+        workers.emplace_back(worker, &continue_training, &training_mode, &workPermit[tid],
+        std::cref(uid_split[tid]), std::cref(mid_split[tid]),
         std::ref(user_paramId_param), std::ref(movie_featId_feature), 
-        std::cref(localUserId_localMovieId_indicator), std::cref(localUserId_localMovieId_rating)));
+        std::cref(user_movie_rating));
     }
 
     scheduler(&continue_training, &training_mode);
 
     for(auto& thread: workers){
-        thread.get();
+        thread.join();
     }
     
     return;
 }
 
-int predict_rating(const int &user_id, const int &movie_id
-){
-        int max_rating = 0;
-        return max_rating;
-}
-
 error_code generateTask(
-    const std::string &REPO_PATH
+    const std::string &REPO_PATH,
+    const std::unordered_map<int, std::vector<float>>& user_paramId_param,
+    const std::unordered_map<int, std::vector<float>>& movie_featId_feature
 ){
 
     error_code ERROR_CODE = error_code::OK;
@@ -375,7 +321,7 @@ error_code generateTask(
             output_stream<<element<<";";
         }
 
-        output_stream<<predict_rating(entry[1], entry[2])<<std::endl;
+        output_stream<<std::roundf(predict(user_paramId_param.at(entry[1]), movie_featId_feature.at(entry[2])))<<std::endl;
 
     }
 
@@ -393,22 +339,28 @@ int main(int argc, char** argv){
         return ERROR_CODE;
     }
 
-    std::unordered_map<int, std::unordered_map<int, int>> USER_MOVIE_RATING;
+    std::unordered_map<int, std::unordered_map<int, float>> USER_MOVIE_RATING;
     std::tie(USER_MOVIE_RATING, ERROR_CODE) = loadUserRatingsTrainData(REPO_PATH);
     if(ERROR_CODE){
         std::cerr<<ERROR_CODE;
         return ERROR_CODE;
     }
 
-    std::array<std::array<float,NUM_OF_FEATURES+1>, NUM_OF_USERS> user_paramId_param;
+    std::unordered_map<int, std::vector<float>> user_paramId_param;
+    for(auto& [user,movie_rating]: USER_MOVIE_RATING){
+        user_paramId_param[user] = std::vector<float>(NUM_OF_FEATURES+1, 0);
+    }
     fillRandom0to1(user_paramId_param);
 
-    std::array<std::array<float,NUM_OF_FEATURES>, NUM_OF_MOVIES> movie_featId_feature;
+    std::unordered_map<int, std::vector<float>> movie_featId_feature;
+    for(int movie = 1; movie <= NUM_OF_MOVIES; movie++){
+        movie_featId_feature[movie] = std::vector<float>(NUM_OF_FEATURES, 0);
+    }
     fillRandom0to1(movie_featId_feature);
 
-    train(movie_featId_feature, user_paramId_param, USER_MOVIE_RATING);
+    train(user_paramId_param, movie_featId_feature, USER_MOVIE_RATING);
     
-    ERROR_CODE = generateTask(REPO_PATH);
+    ERROR_CODE = generateTask(REPO_PATH,user_paramId_param,movie_featId_feature);
     if(ERROR_CODE) {
         std::cerr<<ERROR_CODE;
         return ERROR_CODE;
