@@ -1,3 +1,10 @@
+
+// compile time training settings
+
+#define NUM_OF_FEATURES 10
+#define TRAINING_LOOPS 2000
+#define LEARNING_RATE 0.001
+
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -9,13 +16,10 @@
 
 #include <random>
 
-#include <future>
+#include <thread>
+#include <mutex>
 
 #define NUM_OF_MOVIES 200
-#define NUM_OF_FEATURES 10
-#define TRAINING_LOOPS 2000
-#define LEARNING_RATE 0.001
-
 
 enum error_code{
     OK = 0,
