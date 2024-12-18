@@ -173,7 +173,7 @@ int predict_rating(const int &user_id, const int &movie_id, const int &match_cou
         std::vector<int> match_ratings;
         match_ratings.reserve(match_count);
 
-        while((match_ratings.size() < match_count) and (closest_match < static_cast<int>(user_closestUser_user.at(user_id).size()))){
+        while( (match_ratings.size() < match_count) && (closest_match < static_cast<int>(user_closestUser_user.at(user_id).size()) ) ){
             
             closest_match++;
             auto iskey = user_movie_rating.at( user_closestUser_user.at(user_id)[closest_match] ).find(movie_id);
