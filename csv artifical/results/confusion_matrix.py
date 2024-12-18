@@ -50,9 +50,22 @@ results = {
 
 for dataset in results:
     cpp_dump = pd.read_csv(results[dataset]["path"] , sep=',', header=None)
-    print(cpp_dump)
+    
+    acc_exact = 0
+    acc_1off = 0
+    for i in range(len(cpp_dump[0])):
+        if cpp_dump[0][i] == cpp_dump[1][i]:
+            acc_exact+=1
+        if abs(cpp_dump[0][i] - cpp_dump[1][i]) <= 1:
+            acc_1off+=1
 
-    # Generate confusion matrix
+    acc_exact /= len(cpp_dump[0])
+    acc_1off /= len(cpp_dump[0])
+                    
+    print(results[dataset]["title"] + f"\t exact accuracy: {acc_exact}")
+    print(results[dataset]["title"] + f"\t 1off accuracy: {acc_1off}")
+    print("\n\n")
+
     cm = confusion_matrix(cpp_dump[0], cpp_dump[1])
 
     # Visualize the confusion matrix
@@ -60,4 +73,5 @@ for dataset in results:
     cmd.plot(cmap=plt.cm.Blues)
     plt.title(results[dataset]["title"])
     plt.savefig(SRC_PATH+"\\pngs\\"+results[dataset]["title"]+".png")
-    plt.close() 
+    plt.close()
+
