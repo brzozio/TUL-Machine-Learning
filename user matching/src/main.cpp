@@ -59,7 +59,6 @@ std::pair<std::unordered_map<int, std::unordered_map<int, int>>, error_code> loa
         std::getline(string_stream, loaded_string, ';');
         loaded_rating = std::stoi(loaded_string);
 
-        // std::unoredered_set::operator[]() adds default value if key does not exist so no checks needed
         user_movie_rating[loaded_user_id][loaded_movie_id] = loaded_rating;
 
     }
