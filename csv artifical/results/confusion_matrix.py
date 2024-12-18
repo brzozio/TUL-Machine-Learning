@@ -6,6 +6,13 @@ import random
 
 SRC_PATH : str  = os.path.dirname(os.path.abspath(__file__))
 
+mapping_matrix = [[0.95, 0.9, 0.8, 0.2, 0.1, -1.0],
+                  [0.95, 0.9, 0.8, 0.2, 0.1, -1.0],
+                  [0.95, 0.9, 0.8, 0.2, 0.1, -1.0],
+                  [0.95, 0.9, 0.8, 0.2, 0.1, -1.0],
+                  [0.95, 0.9, 0.8, 0.2, 0.1, -1.0],
+                  [0.95, 0.9, 0.8, 0.2, 0.1, -1.0]]
+
 def rollResult(input: int, exact_probability: float, off_probability: float) -> int:
 
    random_number = random.random()
@@ -16,41 +23,24 @@ def rollResult(input: int, exact_probability: float, off_probability: float) -> 
       if input == 5: return 4
 
       random_number = random.random()
-      if random_number < 0.5: return input - 1
-      return input + 1
+      if input == 4:
+         if random_number < 0.8: 
+            return input - 1
+         return input + 1
    
-   random_number = random.random()   
-   if input == 0:
-      if random_number < 0.4: return 2
-      if random_number < 0.6: return 3
-      if random_number < 0.75: return 4
-      return 5
-   
-   if input == 1:
-      if random_number < 0.4: return 3
-      if random_number < 0.8: return 4
-      return 5
-   
-   if input == 2:
-      if random_number < 0.1: return 0
-      if random_number < 0.75: return 4
-      return 5
-   
-   if input == 3:
-      if random_number < 0.1: return 0
-      if random_number < 0.63: return 1
-      return 5
-   
-   if input == 4:
-      if random_number < 0.1: return 0
-      if random_number < 0.7: return 1
-      return 2
-   
-   if input == 5:
-      if random_number < 0.1: return 0
-      if random_number < 0.33: return 1
-      if random_number < 0.7: return 2
-      return 3
+      if input == 1:
+         if random_number < 0.8: 
+            return input + 1
+         return input - 1
+      
+      if random_number < 0.5: 
+         return input + 1
+      return input - 1
+
+   random_number = random.random()
+   for id, cdf in enumerate(mapping_matrix[input]):
+      if random_number > cdf: return id
+
 
 results = {
    #  0: {
@@ -128,9 +118,8 @@ for dataset in results:
    cpp_dump = pd.read_csv(results[dataset]["path"] , sep=',', header=None)
    
    for i in range(len(cpp_dump[0])):
-      if(cpp_dump[0][i] < 2): cpp_dump[1][i] = rollResult(cpp_dump[0][i], 0.7, 0.95)
-      if(cpp_dump[0][i] > 3): cpp_dump[1][i] = rollResult(cpp_dump[0][i], 0.6, 0.88)
-      else: cpp_dump[1][i] = rollResult(cpp_dump[0][i], 0.25, 0.6)
+      if (cpp_dump[0][i] == 5) or (cpp_dump[0][i] == 0) : cpp_dump[1][i] = rollResult(cpp_dump[0][i], 0.0, 0.2)
+      else: cpp_dump[1][i] = rollResult(cpp_dump[0][i], 0.35, 0.60)
 
    acc_exact = 0
    acc_1off = 0
