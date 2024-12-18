@@ -1,6 +1,4 @@
-import csv
 import pandas as pd
-import numpy as np
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import os
@@ -23,6 +21,30 @@ results = {
     3: {
        "path": SRC_PATH+"\\simil_valid.csv", 
        "title" : "User Similarity Validating Set"
+    },
+    4: {
+       "path": SRC_PATH+"\\knn_training.csv", 
+       "title" : "K Nearest Neighbours Training Set"
+    },
+    5: {
+       "path": SRC_PATH+"\\knn_valid.csv", 
+       "title" : "K Nearest Neighbours Validating Set"
+    },
+    6: {
+        "path": SRC_PATH+"\\btree_train.csv",
+        "title": "Decision Tree Training Set"
+    },
+    7: {
+       "path": SRC_PATH+"\\btree_valid.csv", 
+       "title" : "Decision Tree Validating Set"
+    },
+    8: {
+        "path": SRC_PATH+"\\forest_train.csv",
+        "title": "Random Forest Training Set"
+    },
+    9: {
+       "path": SRC_PATH+"\\forest_valid.csv", 
+       "title" : "Random Forest Validating Set"
     }
 }
 
