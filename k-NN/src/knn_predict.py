@@ -101,7 +101,7 @@ for user in range(NUM_OF_USERS):
 
     # print(f"{user:<3} User: {user_id:<4} Weights: {best_weight} K: {best_k}")
         
-    returned_movies, returned_reviews = predict(user_id=user_id, user_iter=user, best_weights=best_weight, best_k_neighbours=best_k, predict_ids=preditc_ids, train_ids=train_ids)
+    returned_movies, returned_reviews = predict(user_id=user_id, user_iter=user, best_weights=best_weight, best_k_neighbours=best_k, predict_ids=train_ids, train_ids=train_ids)
     
     user_rating_data_movies.append(returned_movies)
     user_rating_data_predicted.append(returned_reviews)

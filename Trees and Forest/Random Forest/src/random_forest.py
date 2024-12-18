@@ -121,7 +121,7 @@ for user in range(NUM_OF_USERS):
     preditc_ids: list = list(user_rating['NAN_RATED'][user].keys())
     train_ids:   list = list(user_rating['RATED'][user].keys())
 
-    returned_movies, returned_reviews = test_user(user=user, best_weights=best_weight, predict_ids=preditc_ids, train_ids=train_ids, num_of_trees=100)
+    returned_movies, returned_reviews = test_user(user=user, best_weights=best_weight, predict_ids=train_ids, train_ids=train_ids, num_of_trees=100)
     
     user_rating_data_movies.append(returned_movies)
     user_rating_data_predicted.append(returned_reviews)
