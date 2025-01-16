@@ -1,0 +1,13 @@
+ilość tokenów w kontekście:     8
+rozmiar ukrytej warstwy LSTM:   32
+ilość warstw LSTM:      1
+dla zainicjalizowanego kontekstu:"N"
+wygenerowano:
+
+"Niegomnienał no tema
+Zdan krzewła
+Powroskie się dómu
+I kulonów
+Fuszę
+Widzie w muszacie wielko
+Któreby"
