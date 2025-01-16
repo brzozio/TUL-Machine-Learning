@@ -85,21 +85,21 @@ if __name__ == "__main__":
 
     dataset = TextDataset(training_text, seq_length=SEQUENCE_LENGTH)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=11, persistent_workers=True)
-    model = LSTMModel(vocab_size=len(dataset.chars), hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS)
+    model = LSTMModel(vocab_size=len(dataset.chars), hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, seq_length=SEQUENCE_LENGTH)
 
     checkpoint_callback = ModelCheckpoint(
-        every_n_epochs=10,
+        every_n_epochs=1,
         save_top_k=-1,
         dirpath=CHCK_PATH,
         filename="lstm-text-gen-{epoch:02d}"
     )
 
     trainer = pl.Trainer(
-        max_epochs=50,
+        max_epochs=1,
         accelerator="gpu",
         callbacks=[checkpoint_callback]
     )
-    
+
     trainer.fit(model, dataloader)
 
     print(f"ilość tokenów w kontekście:\t{SEQUENCE_LENGTH}")
