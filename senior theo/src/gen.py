@@ -18,10 +18,10 @@ file_path = f"{DATA_PATH}\\train.txt"
 with open(file_path, "r", encoding="utf-8") as f:
     training_text = f.read()
 dataset = TextDataset(training_text, seq_length=SEQUENCE_LENGTH)
+
 model = LSTMModel.load_from_checkpoint(checkpoint_path, vocab_size=len(dataset.chars))
+model.to("cuda")
 model.eval()
-
-
 
 for init in START_TEXT:
     print(f"\npoczątkowy kontekst:\"{init}\"\n\"{generate_text(model, dataset, start_text=init)}\"")

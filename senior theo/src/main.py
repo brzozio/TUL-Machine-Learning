@@ -48,13 +48,13 @@ class LSTMModel(pl.LightningModule):
     def forward(self, x, hidden=None):
         embedded = self.embedding(x)
         output, hidden = self.lstm(embedded, hidden)
-        logits = self.linear(output)
-        return logits, hidden
+        loutput = self.linear(output)
+        return loutput, hidden
 
     def training_step(self, batch, batch_idx):
         input_seq, target_seq = batch
-        logits, _ = self(input_seq)
-        loss = self.loss_fn(logits.view(-1, logits.size(-1)), target_seq.view(-1))
+        loutput, _ = self(input_seq)
+        loss = self.loss_fn(loutput.view(-1, loutput.size(-1)), target_seq.view(-1))
         self.log("train_loss", loss)
         return loss
 
@@ -68,8 +68,8 @@ def generate_text(model, dataset, start_text="A", length=100):
 
     hidden = None
     for _ in range(length):
-        logits, hidden = model(input_seq, hidden)
-        probs = torch.softmax(logits[:, -1, :], dim=-1).detach().squeeze().cpu().numpy()
+        loutput, hidden = model(input_seq, hidden)
+        probs = torch.softmax(loutput[:, -1, :], dim=-1).detach().squeeze().cpu().numpy()
         next_idx = random.choices(range(len(probs)), weights=probs)[0]
         next_char = dataset.idx_to_char[next_idx]
         generated.append(next_char)
